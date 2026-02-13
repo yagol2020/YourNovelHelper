@@ -1,3 +1,12 @@
+"""
+模型训练模块
+
+使用 LoRA/QLoRA 技术微调 Qwen3-7B 模型，支持：
+- 从预处理后的数据加载训练集和验证集
+- 配置 LoRA 参数进行高效微调
+- 导出合并后的完整模型
+"""
+
 import os
 import sys
 import json
@@ -25,9 +34,12 @@ from datasets import load_dataset
 
 @dataclass
 class TrainConfig:
+    """训练配置参数"""
+
     model_name: str = "Qwen/Qwen3-7B"
     trust_remote_code: bool = True
 
+    # LoRA 配置
     method: str = "qlora"
     lora_rank: int = 16
     lora_alpha: int = 32
@@ -44,6 +56,7 @@ class TrainConfig:
         ]
     )
 
+    # 训练超参数
     per_device_batch_size: int = 2
     gradient_accumulation_steps: int = 4
     learning_rate: float = 1e-4
@@ -54,20 +67,35 @@ class TrainConfig:
     eval_steps: int = 500
     max_seq_length: int = 2048
 
+    # 训练选项
     bf16: bool = True
     gradient_checkpointing: bool = True
     optim: str = "adamw_torch"
 
+    # 输出配置
     output_dir: str = "models/checkpoints"
     logging_dir: str = "logs"
 
 
 class NovelTrainer:
+    """
+    小说模型训练器
+
+    负责加载模型、数据集、配置 LoRA、运行训练和导出模型
+    """
+
     def __init__(self, config_path: str = "config/config.yaml"):
+        """
+        初始化训练器，加载配置文件
+
+        Args:
+            config_path: 配置文件路径
+        """
         with open(config_path, "r", encoding="utf-8") as f:
             config = yaml.safe_load(f)
 
         self.train_config = TrainConfig()
+        # 从配置文件中覆盖默认参数
         for key, value in config.get("training", {}).items():
             if hasattr(self.train_config, key):
                 setattr(self.train_config, key, value)
@@ -78,6 +106,12 @@ class NovelTrainer:
         self.trust_remote_code = config.get("model", {}).get("trust_remote_code", True)
 
     def load_tokenizer(self):
+        """
+        加载分词器
+
+        Returns:
+            tokenizer 对象
+        """
         print(f"Loading tokenizer from {self.model_name}...")
         tokenizer = AutoTokenizer.from_pretrained(
             self.model_name,
@@ -85,12 +119,22 @@ class NovelTrainer:
             padding_side="right",
         )
 
+        # 设置 pad_token
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
 
         return tokenizer
 
     def load_model(self, tokenizer):
+        """
+        加载预训练模型并应用 LoRA
+
+        Args:
+            tokenizer: 分词器对象
+
+        Returns:
+            应用 LoRA 后的模型
+        """
         print(f"Loading model from {self.train_config.model_name}...")
 
         model = AutoModelForCausalLM.from_pretrained(
@@ -100,12 +144,22 @@ class NovelTrainer:
             device_map="auto",
         )
 
+        # 应用 LoRA
         model = self._setup_lora(model)
         model.print_trainable_parameters()
 
         return model
 
     def _setup_lora(self, model):
+        """
+        配置 LoRA 参数
+
+        Args:
+            model: 基础模型
+
+        Returns:
+            应用 LoRA 后的模型
+        """
         lora_config = LoraConfig(
             task_type=TaskType.CAUSAL_LM,
             r=self.train_config.lora_rank,
@@ -119,12 +173,30 @@ class NovelTrainer:
         return model
 
     def load_dataset(self, tokenizer):
+        """
+        加载并预处理训练数据集
+
+        对 prompt-response 数据进行 tokenize，构建 input_ids 和 labels。
+        prompt 部分使用 -100 填充，使得训练时只计算 response 的 loss。
+
+        Args:
+            tokenizer: 分词器对象
+
+        Returns:
+            包含 train 和 validation 数据集的字典
+        """
         data_config = {
             "train": "data/processed/train.jsonl",
             "validation": "data/processed/val.jsonl",
         }
 
         def tokenize_function(examples):
+            """
+            tokenize 函数
+
+            将 prompt 和 response 分别 tokenize，然后拼接。
+            labels 中 prompt 部分设为 -100，只计算 response 的 loss。
+            """
             prompts = examples["prompt"]
             responses = examples["response"]
 
@@ -137,13 +209,17 @@ class NovelTrainer:
                     "input_ids"
                 ]
 
+                # 拼接 prompt 和 response
                 input_id = prompt_ids + response_ids
+                # prompt 部分设为 -100，保留 response 部分
                 label = [-100] * len(prompt_ids) + response_ids
 
+                # 截断过长的序列
                 if len(input_id) > self.train_config.max_seq_length:
                     input_id = input_id[: self.train_config.max_seq_length]
                     label = label[: self.train_config.max_seq_length]
 
+                # padding 到固定长度
                 while len(input_id) < self.train_config.max_seq_length:
                     input_id.append(tokenizer.pad_token_id)
                     label.append(-100)
@@ -172,6 +248,14 @@ class NovelTrainer:
         return datasets
 
     def train(self):
+        """
+        执行模型训练流程
+
+        1. 加载分词器和模型
+        2. 加载数据集
+        3. 配置训练参数
+        4. 开始训练并保存模型
+        """
         tokenizer = self.load_tokenizer()
         model = self.load_model(tokenizer)
         datasets = self.load_dataset(tokenizer)
@@ -179,6 +263,7 @@ class NovelTrainer:
         if not datasets:
             raise ValueError("No datasets found. Please run data preprocessing first.")
 
+        # 配置训练参数
         training_args = TrainingArguments(
             output_dir=self.train_config.output_dir,
             per_device_train_batch_size=self.train_config.per_device_batch_size,
@@ -201,11 +286,13 @@ class NovelTrainer:
             remove_unused_columns=False,
         )
 
+        # 数据整理器
         data_collator = DataCollatorForLanguageModeling(
             tokenizer=tokenizer,
             mlm=False,
         )
 
+        # 创建训练器
         trainer = Trainer(
             model=model,
             args=training_args,
@@ -226,6 +313,15 @@ class NovelTrainer:
     def merge_and_export(
         self, checkpoint_path: str, export_path: str = "models/novel-qlora"
     ):
+        """
+        合并 LoRA 权重并导出完整模型
+
+        将 LoRA 权重合并到基础模型中，导出可独立使用的模型文件。
+
+        Args:
+            checkpoint_path: LoRA checkpoint 路径
+            export_path: 导出路径
+        """
         print(f"Loading base model and checkpoint from {checkpoint_path}...")
 
         base_model = AutoModelForCausalLM.from_pretrained(
@@ -235,6 +331,7 @@ class NovelTrainer:
             device_map="cpu",
         )
 
+        # 加载 LoRA 并合并
         model = PeftModel.from_pretrained(base_model, checkpoint_path)
         model = model.merge_and_unload()
 
@@ -248,6 +345,7 @@ class NovelTrainer:
 
 
 def main():
+    """命令行入口函数"""
     import argparse
 
     parser = argparse.ArgumentParser(description="Train novel generation model")
