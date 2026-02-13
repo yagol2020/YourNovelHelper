@@ -5,9 +5,9 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
-[![Qwen](https://img.shields.io/badge/Model-Qwen3--7B-0a0a0a?style=flat&logo=Qwen)](https://github.com/QwenLM/Qwen2.5)
+[![Qwen](https://img.shields.io/badge/Model-Qwen3--4B-0a0a0a?style=flat&logo=Qwen)](https://github.com/QwenLM/Qwen2.5)
 
-*基于 Qwen3-7B 的小说风格微调项目，帮助用户创建自己喜欢风格的小说*
+*基于 Qwen3-4B 的小说风格微调项目，帮助用户创建自己喜欢风格的小说*
 
 </div>
 
@@ -18,7 +18,7 @@
 | 功能 | 描述 |
 |:---:|:---|
 | 📚 **数据预处理** | 将原始小说文本转换为训练数据 |
-| 🔧 **LoRA 微调** | 使用 QLoRA 低成本微调 Qwen3-7B 模型 |
+| 🔧 **LoRA 微调** | 使用 QLoRA 低成本微调 Qwen3-4B 模型 |
 | 💻 **命令行工具** | 交互式小说续写 |
 | 🌐 **Web API** | FastAPI 服务接口 |
 | 🎨 **Web UI** | Gradio 图形界面 |
@@ -71,6 +71,7 @@ source .venv/bin/activate
 # 安装依赖
 uv pip install torch transformers peft datasets trl accelerate pyyaml
 uv pip install fastapi uvicorn gradio jieba tqdm scikit-learn
+uv pip install modelscope
 ```
 
 或者安装项目（包含所有依赖）：
@@ -104,6 +105,8 @@ python -m src.training.train
 训练参数可在 `config/config.yaml` 中修改。
 
 ### 5. 使用模型
+
+> **注意**: 默认使用 ModelScope 加载 Qwen3-4B 模型。如需使用其他模型，可在命令中指定。
 
 #### 命令行
 
@@ -139,7 +142,7 @@ python -m src.api.webui
 
 | 配置项 | 说明 | 默认值 |
 |:---|:---|:---|
-| `model.name` | 模型名称 | Qwen/Qwen3-7B |
+| `model.name` | 模型名称 (支持 ModelScope 模型 ID 或本地路径) | Qwen3-4B |
 | `training.method` | 训练方法 | qlora |
 | `training.lora_rank` | LoRA rank | 16 |
 | `training.num_epochs` | 训练轮数 | 3 |
@@ -152,8 +155,8 @@ python -m src.api.webui
 
 | 场景 | 最低要求 |
 |:---|:---|
-| **训练** | 16GB 显存 (QLoRA) |
-| **推理** | 8GB 显存 |
+| **训练** | 8GB 显存 (QLoRA) |
+| **推理** | 6GB 显存 |
 
 ---
 
@@ -162,7 +165,8 @@ python -m src.api.webui
 ```python
 from src.inference.generate import NovelGenerator
 
-generator = NovelGenerator("models/novel-qlora")
+# 使用默认模型 (Qwen3-4B from ModelScope)
+generator = NovelGenerator()
 result = generator.generate(
     prompt="雨夜，城市的一角",
     style_prompt="金庸的武侠风格"
