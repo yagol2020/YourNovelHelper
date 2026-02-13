@@ -1,18 +1,29 @@
+<!-- markdownlint-disable MD033 -->
+<div align="center">
+
 # YourNovelHelper
 
-基于 Qwen3-7B 的小说风格微调项目，帮助用户创建自己喜欢风格的小说。
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
+[![Qwen](https://img.shields.io/badge/Model-Qwen3--7B-0a0a0a?style=flat&logo=Qwen)](https://github.com/QwenLM/Qwen2.5)
 
-## 项目简介
+*基于 Qwen3-7B 的小说风格微调项目，帮助用户创建自己喜欢风格的小说*
 
-YourNovelHelper 是一个小说创作辅助工具，通过收集小说文本数据集，使用 LoRA/QLoRA 技术微调 Qwen3-7B 模型，从而学习特定的小说风格，帮助用户更好地创作小说。
+</div>
+
+---
 
 ## 功能特性
 
-- **数据预处理**: 将原始小说文本转换为训练数据
-- **LoRA 微调**: 使用 QLoRA 低成本微调 Qwen3-7B 模型
-- **命令行工具**: 交互式小说续写
-- **Web API**: FastAPI 服务接口
-- **Web UI**: Gradio 图形界面
+| 功能 | 描述 |
+|:---:|:---|
+| 📚 **数据预处理** | 将原始小说文本转换为训练数据 |
+| 🔧 **LoRA 微调** | 使用 QLoRA 低成本微调 Qwen3-7B 模型 |
+| 💻 **命令行工具** | 交互式小说续写 |
+| 🌐 **Web API** | FastAPI 服务接口 |
+| 🎨 **Web UI** | Gradio 图形界面 |
+
+---
 
 ## 项目结构
 
@@ -38,6 +49,8 @@ YourNovelHelper/
 ├── logs/                     # 日志
 └── scripts/                  # 脚本
 ```
+
+---
 
 ## 快速开始
 
@@ -118,21 +131,31 @@ python -m src.api.webui
 
 访问 http://localhost:7860 打开 Web 界面。
 
+---
+
 ## 配置说明
 
 `config/config.yaml` 主要配置项:
 
-- `model.name`: 模型名称 (默认 Qwen/Qwen3-7B)
-- `training.method`: 训练方法 (qlora)
-- `training.lora_rank`: LoRA rank
-- `training.num_epochs`: 训练轮数
-- `inference.temperature`: 生成温度
-- `api.port`: API 服务端口
+| 配置项 | 说明 | 默认值 |
+|:---|:---|:---|
+| `model.name` | 模型名称 | Qwen/Qwen3-7B |
+| `training.method` | 训练方法 | qlora |
+| `training.lora_rank` | LoRA rank | 16 |
+| `training.num_epochs` | 训练轮数 | 3 |
+| `inference.temperature` | 生成温度 | 0.7 |
+| `api.port` | API 服务端口 | 8000 |
+
+---
 
 ## 硬件要求
 
-- **训练**: 至少 16GB 显存的 GPU (QLoRA)
-- **推理**: 至少 8GB 显存
+| 场景 | 最低要求 |
+|:---|:---|
+| **训练** | 16GB 显存 (QLoRA) |
+| **推理** | 8GB 显存 |
+
+---
 
 ## 示例
 
@@ -147,6 +170,8 @@ result = generator.generate(
 print(result)
 ```
 
+---
+
 ## API 示例
 
 ```bash
@@ -159,6 +184,8 @@ curl -X POST http://localhost:8000/generate \
   }'
 ```
 
+---
+
 ## 许可证
 
 MIT License
@@ -166,4 +193,3 @@ MIT License
 ---
 
 > 本项目由 [OpenCode](https://opencode.ai) AI 编程助手协助开发。
-
