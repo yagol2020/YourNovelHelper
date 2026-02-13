@@ -7,16 +7,20 @@
 - 可配置的生成参数（temperature、top_p、top_k 等）
 """
 
-import os
-import sys
 from pathlib import Path
-from typing import Optional, List
 import argparse
 
 import yaml
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
-from peft import PeftModel
+
+try:
+    from modelscope import AutoModelForCausalLM as MsAutoModelForCausalLM
+    from modelscope import AutoTokenizer as MsAutoTokenizer
+
+    MODELSCOPE_AVAILABLE = True
+except ImportError:
+    MODELSCOPE_AVAILABLE = False
 
 
 class NovelGenerator:
@@ -28,7 +32,7 @@ class NovelGenerator:
 
     def __init__(
         self,
-        model_path: str = "models/novel-qlora",
+        model_path: str = "Qwen3-4B",
         config_path: str = "config/config.yaml",
     ):
         """
@@ -59,26 +63,44 @@ class NovelGenerator:
         """
         加载预训练模型和分词器
 
-        如果模型不存在会抛出 FileNotFoundError
+        支持从 ModelScope 或本地路径加载模型
         """
-        if not Path(self.model_path).exists():
-            raise FileNotFoundError(f"Model not found at {self.model_path}")
-        print(f"Loading model from {self.model_path}...")
-
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            self.model_path, trust_remote_code=True
+        is_modelscope = MODELSCOPE_AVAILABLE and (
+            Path(self.model_path).exists() is False
+            or str(self.model_path).startswith("qwen/")
+            or "/" not in str(self.model_path)
         )
 
-        # 设置 pad_token
-        if self.tokenizer.pad_token is None:
-            self.tokenizer.pad_token = self.tokenizer.eos_token
-
-        self.model = AutoModelForCausalLM.from_pretrained(
-            self.model_path,
-            trust_remote_code=True,
-            torch_dtype=torch.bfloat16,
-            device_map="auto",
-        )
+        if is_modelscope:
+            model_name = (
+                self.model_path
+                if "/" in str(self.model_path)
+                else f"qwen/{self.model_path}"
+            )
+            print(f"Loading model from ModelScope: {model_name}...")
+            self.tokenizer = MsAutoTokenizer.from_pretrained(
+                model_name, trust_remote_code=True
+            )
+            self.model = MsAutoModelForCausalLM.from_pretrained(
+                model_name,
+                trust_remote_code=True,
+                device_map="auto",
+            )
+        else:
+            if not Path(self.model_path).exists():
+                raise FileNotFoundError(f"Model not found at {self.model_path}")
+            print(f"Loading model from {self.model_path}...")
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                self.model_path, trust_remote_code=True
+            )
+            if self.tokenizer.pad_token is None:
+                self.tokenizer.pad_token = self.tokenizer.eos_token
+            self.model = AutoModelForCausalLM.from_pretrained(
+                self.model_path,
+                trust_remote_code=True,
+                torch_dtype=torch.bfloat16,
+                device_map="auto",
+            )
 
         self.model.eval()
         print("Model loaded successfully!")
@@ -98,11 +120,24 @@ class NovelGenerator:
         if self.model is None:
             self.load_model()
 
-        # 构建完整的 prompt
+        # 构建 messages（适配 Qwen3 基础模型，禁用 thinking）
+        system_msg = "你是一个小说作家，请直接续写小说内容，不要添加任何解释或评论。"
         if style_prompt:
-            full_prompt = f"请根据以下风格续写小说：{style_prompt}\n\n请续写：{prompt}"
+            user_msg = (
+                f"以下是小说开头：\n{prompt}\n\n请根据以下风格继续写：{style_prompt}"
+            )
         else:
-            full_prompt = f"请续写以下内容：\n{prompt}\n\n续写："
+            user_msg = f"以下是小说开头：\n{prompt}\n\n请继续写这个故事："
+
+        messages = [
+            {"role": "system", "content": system_msg},
+            {"role": "user", "content": user_msg},
+        ]
+
+        # 使用 chat template 并禁用 thinking 模式
+        full_prompt = self.tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True, enable_thinking=False
+        )
 
         # tokenize 输入
         inputs = self.tokenizer(full_prompt, return_tensors="pt")
@@ -179,7 +214,10 @@ def main():
     """命令行入口函数"""
     parser = argparse.ArgumentParser(description="Novel generation inference")
     parser.add_argument(
-        "--model", type=str, default="models/novel-qlora", help="Model path"
+        "--model",
+        type=str,
+        default="Qwen3-4B",
+        help="Model path or ModelScope model ID",
     )
     parser.add_argument(
         "--config", type=str, default="config/config.yaml", help="Config file"
