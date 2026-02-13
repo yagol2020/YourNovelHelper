@@ -162,3 +162,8 @@ curl -X POST http://localhost:8000/generate \
 ## 许可证
 
 MIT License
+
+---
+
+> 本项目由 [OpenCode](https://opencode.ai) AI 编程助手协助开发。
+
