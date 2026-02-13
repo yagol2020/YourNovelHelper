@@ -1,0 +1,49 @@
+model:
+  name: Qwen/Qwen3-7B
+  trust_remote_code: true
+  
+training:
+  method: qlora
+  lora_rank: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+  
+  per_device_batch_size: 2
+  gradient_accumulation_steps: 4
+  learning_rate: 1e-4
+  num_epochs: 3
+  warmup_steps: 100
+  logging_steps: 10
+  save_steps: 500
+  eval_steps: 500
+  max_seq_length: 2048
+  
+  bf16: true
+  gradient_checkpointing: true
+  optim: adamw_torch
+  
+data:
+  train_path: data/processed/train.jsonl
+  val_path: data/processed/val.jsonl
+  test_path: data/processed/test.jsonl
+  prompt_template: "请根据以下风格续写小说：{prompt}\n\n请续写："
+  
+inference:
+  max_new_tokens: 2048
+  temperature: 0.7
+  top_p: 0.8
+  top_k: 20
+  repetition_penalty: 1.1
+
+api:
+  host: 0.0.0.0
+  port: 8000
+  workers: 1
