@@ -1,7 +1,7 @@
 """
 模型训练模块
 
-使用 LoRA/QLoRA 技术微调 Qwen3-7B 模型，支持：
+使用 LoRA/QLoRA 技术微调 Qwen3-4B 模型，支持：
 - 从预处理后的数据加载训练集和验证集
 - 配置 LoRA 参数进行高效微调
 - 导出合并后的完整模型
@@ -31,12 +31,20 @@ from peft import (
 )
 from datasets import load_dataset
 
+try:
+    from modelscope import AutoModelForCausalLM as MsAutoModelForCausalLM
+    from modelscope import AutoTokenizer as MsAutoTokenizer
+
+    MODELSCOPE_AVAILABLE = True
+except ImportError:
+    MODELSCOPE_AVAILABLE = False
+
 
 @dataclass
 class TrainConfig:
     """训练配置参数"""
 
-    model_name: str = "Qwen/Qwen3-7B"
+    model_name: str = "Qwen3-4B"
     trust_remote_code: bool = True
 
     # LoRA 配置
@@ -112,14 +120,33 @@ class NovelTrainer:
         Returns:
             tokenizer 对象
         """
-        print(f"Loading tokenizer from {self.model_name}...")
-        tokenizer = AutoTokenizer.from_pretrained(
-            self.model_name,
-            trust_remote_code=self.trust_remote_code,
-            padding_side="right",
+        is_modelscope = MODELSCOPE_AVAILABLE and (
+            not Path(self.model_name).exists()
+            or str(self.model_name).startswith("qwen/")
+            or "/" not in str(self.model_name)
         )
 
-        # 设置 pad_token
+        model_id = (
+            self.model_name
+            if "/" in str(self.model_name)
+            else f"qwen/{self.model_name}"
+        )
+
+        print(f"Loading tokenizer from {model_id}...")
+
+        if is_modelscope:
+            tokenizer = MsAutoTokenizer.from_pretrained(
+                model_id,
+                trust_remote_code=self.trust_remote_code,
+                padding_side="right",
+            )
+        else:
+            tokenizer = AutoTokenizer.from_pretrained(
+                self.model_name,
+                trust_remote_code=self.trust_remote_code,
+                padding_side="right",
+            )
+
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
 
@@ -135,16 +162,34 @@ class NovelTrainer:
         Returns:
             应用 LoRA 后的模型
         """
-        print(f"Loading model from {self.train_config.model_name}...")
-
-        model = AutoModelForCausalLM.from_pretrained(
-            self.train_config.model_name,
-            trust_remote_code=self.trust_remote_code,
-            torch_dtype=torch.bfloat16 if self.train_config.bf16 else torch.float32,
-            device_map="auto",
+        is_modelscope = MODELSCOPE_AVAILABLE and (
+            not Path(self.model_name).exists()
+            or str(self.model_name).startswith("qwen/")
+            or "/" not in str(self.model_name)
         )
 
-        # 应用 LoRA
+        model_id = (
+            self.model_name
+            if "/" in str(self.model_name)
+            else f"qwen/{self.model_name}"
+        )
+
+        print(f"Loading model from {model_id}...")
+
+        if is_modelscope:
+            model = MsAutoModelForCausalLM.from_pretrained(
+                model_id,
+                trust_remote_code=self.trust_remote_code,
+                device_map="auto",
+            )
+        else:
+            model = AutoModelForCausalLM.from_pretrained(
+                self.model_name,
+                trust_remote_code=self.trust_remote_code,
+                torch_dtype=torch.bfloat16 if self.train_config.bf16 else torch.float32,
+                device_map="auto",
+            )
+
         model = self._setup_lora(model)
         model.print_trainable_parameters()
 

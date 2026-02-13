@@ -22,6 +22,8 @@ try:
 except ImportError:
     MODELSCOPE_AVAILABLE = False
 
+from peft import PeftModel
+
 
 class NovelGenerator:
     """
@@ -33,16 +35,19 @@ class NovelGenerator:
     def __init__(
         self,
         model_path: str = "Qwen3-4B",
+        lora_path: str = "",
         config_path: str = "config/config.yaml",
     ):
         """
         初始化生成器
 
         Args:
-            model_path: 模型路径
+            model_path: 基础模型路径 (支持 ModelScope 模型 ID 或本地路径)
+            lora_path: LoRA 权重路径 (可选，指定后加载 LoRA 权重)
             config_path: 配置文件路径
         """
         self.model_path = model_path
+        self.lora_path = lora_path
         self.config_path = config_path
 
         # 加载配置
@@ -101,6 +106,16 @@ class NovelGenerator:
                 torch_dtype=torch.bfloat16,
                 device_map="auto",
             )
+
+        # 加载 LoRA 权重 (如果指定)
+        if self.lora_path and Path(self.lora_path).exists():
+            print(f"Loading LoRA weights from {self.lora_path}...")
+            self.model = PeftModel.from_pretrained(
+                self.model,
+                self.lora_path,
+                device_map="auto",
+            )
+            print("LoRA weights loaded!")
 
         self.model.eval()
         print("Model loaded successfully!")
@@ -217,7 +232,13 @@ def main():
         "--model",
         type=str,
         default="Qwen3-4B",
-        help="Model path or ModelScope model ID",
+        help="Base model path or ModelScope model ID",
+    )
+    parser.add_argument(
+        "--lora",
+        type=str,
+        default="",
+        help="LoRA weights path (optional, for fine-tuned model)",
     )
     parser.add_argument(
         "--config", type=str, default="config/config.yaml", help="Config file"
@@ -232,7 +253,7 @@ def main():
 
     args = parser.parse_args()
 
-    generator = NovelGenerator(args.model, args.config)
+    generator = NovelGenerator(args.model, args.lora, args.config)
 
     # 命令行参数覆盖配置文件
     if args.max_tokens:
