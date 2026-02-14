@@ -222,5 +222,6 @@ with open(file_path, "w", encoding="utf-8") as f:
 
 - **No proactive changes**: Do NOT make changes without user approval
 - **Verify before committing**: Always run linting before suggesting commits
+- **Push to GitHub**: Always push changes to GitHub after each modification
 - **Security**: Never expose API keys or secrets in code
 - **GPU memory**: Be mindful of memory usage when loading large models
