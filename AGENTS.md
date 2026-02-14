@@ -1,6 +1,7 @@
 # AGENTS.md - Developer Guidelines for YourNovelHelper
 
-YourNovelHelper is a novel writing assistant based on Qwen3-7B, using LoRA/QLoRA fine-tuning. The project consists of data preprocessing, training, inference, API, and WebUI components.
+YourNovelHelper is a novel writing assistant based on LLM, using LoRA/QLoRA fine-tuning. The project consists of data
+preprocessing, training, inference, API, and WebUI components.
 
 ---
 
@@ -44,11 +45,13 @@ pytest tests/ --cov=src --cov-report=term-missing
 ## 2. Code Style Guidelines
 
 ### General Principles
+
 - **No comments**: Do NOT add comments unless explicitly requested
 - **Type hints**: Use type hints for all function arguments and return values
 - **Error handling**: Use try-except with specific exception types, not bare except
 
 ### Imports
+
 ```python
 # Standard library first
 import os
@@ -66,6 +69,7 @@ from src.inference.generate import NovelGenerator
 ```
 
 ### Formatting
+
 - **Line length**: Maximum 100 characters
 - **Indentation**: 4 spaces
 - **Blank lines**: Two between top-level definitions
@@ -73,16 +77,17 @@ from src.inference.generate import NovelGenerator
 
 ### Naming Conventions
 
-| Type | Convention | Example |
-|------|------------|---------|
-| Modules | snake_case | `preprocess.py` |
-| Classes | PascalCase | `NovelDatasetProcessor` |
-| Functions | snake_case | `load_raw_texts` |
-| Variables | snake_case | `training_data` |
-| Constants | UPPER_SNAKE | `MAX_SEQ_LENGTH` |
-| Dataclasses | PascalCase | `class DataConfig:` |
+| Type        | Convention  | Example                 |
+|-------------|-------------|-------------------------|
+| Modules     | snake_case  | `preprocess.py`         |
+| Classes     | PascalCase  | `NovelDatasetProcessor` |
+| Functions   | snake_case  | `load_raw_texts`        |
+| Variables   | snake_case  | `training_data`         |
+| Constants   | UPPER_SNAKE | `MAX_SEQ_LENGTH`        |
+| Dataclasses | PascalCase  | `class DataConfig:`     |
 
 ### Type Annotations
+
 ```python
 # Good
 def process(self, raw_dir: str = "data/raw") -> Dict[str, List[Any]]:
@@ -94,6 +99,7 @@ def process(self, raw_dir="data/raw"):  # No type hints
 ```
 
 ### Dataclasses for Configuration
+
 ```python
 from dataclasses import dataclass, field
 
@@ -105,6 +111,7 @@ class DataConfig:
 ```
 
 ### Error Handling
+
 ```python
 # Good
 try:
@@ -123,6 +130,7 @@ except:  # BAD
 ```
 
 ### Function Design
+
 - Keep functions under 50 lines
 - Single responsibility
 - Use early returns for error conditions
@@ -140,6 +148,7 @@ def load_texts(self, path: str) -> List[str]:
 ```
 
 ### Class Design
+
 - Use `__init__` for initialization only
 - Use private methods (prefixed with `_`) for internal logic
 
@@ -161,6 +170,7 @@ class NovelDatasetProcessor:
 ## 3. Common Patterns
 
 ### Path Handling
+
 ```python
 from pathlib import Path
 
@@ -172,6 +182,7 @@ if Path(path).exists():
 ```
 
 ### Configuration Loading
+
 ```python
 import yaml
 from dataclasses import dataclass
@@ -191,6 +202,7 @@ def __init__(self, config_path: str):
 ```
 
 ### JSONL File Operations
+
 ```python
 # Reading
 with open(file_path, "r", encoding="utf-8") as f:

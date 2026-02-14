@@ -44,7 +44,18 @@ class NovelDatasetProcessor:
         """初始化处理器，加载配置文件"""
         with open(config_path, "r", encoding="utf-8") as f:
             self.config = yaml.safe_load(f)
-        self.data_config = DataConfig()
+        data_cfg = self.config.get("data", {})
+        self.data_config = DataConfig(
+            raw_dir=data_cfg.get("raw_dir", "data/raw"),
+            processed_dir=data_cfg.get("processed_dir", "data/processed"),
+            train_ratio=data_cfg.get("train_ratio", 0.8),
+            val_ratio=data_cfg.get("val_ratio", 0.1),
+            test_ratio=data_cfg.get("test_ratio", 0.1),
+            min_text_length=data_cfg.get("min_text_length", 100),
+            max_text_length=data_cfg.get("max_text_length", 10000),
+            chunk_size=data_cfg.get("chunk_size", 512),
+            overlap=data_cfg.get("overlap", 50),
+        )
 
     def load_raw_texts(self, raw_dir: Optional[str] = None) -> List[str]:
         """
@@ -132,10 +143,19 @@ class NovelDatasetProcessor:
                 if len(prompt) < 50 or len(continuation) < 50:
                     continue
 
-                # 截断 prompt 到 200 字符以适应模板
                 prompt = prompt[:200]
 
-                # 使用模板格式化 prompt
+                max_seq_length = self.config.get("training", {}).get(
+                    "max_seq_length", 2048
+                )
+                template_overhead = len(prompt_template.format(prompt=""))
+                max_continuation_length = (
+                    max_seq_length - len(prompt) - template_overhead
+                )
+                if max_continuation_length <= 0:
+                    continue
+                continuation = continuation[:max_continuation_length]
+
                 formatted = prompt_template.format(prompt=prompt)
 
                 training_data.append(
@@ -166,22 +186,23 @@ class NovelDatasetProcessor:
         text_len = len(text)
 
         while start < text_len:
-            # 计算 chunk 结束位置
             end = min(start + self.data_config.chunk_size, text_len)
 
-            # 尝试在标点符号处断句
-            for punct in ["。", "！", "？", "\n"]:
-                last_punct = text.rfind(punct, start, end)
-                if last_punct > start:
-                    end = last_punct + 1
-                    break
+            if end < text_len:
+                for punct in ["。", "！", "？", "\n"]:
+                    last_punct = text.rfind(punct, start, end)
+                    if last_punct > start:
+                        end = last_punct + 1
+                        break
 
             chunk = text[start:end].strip()
             if chunk:
                 chunks.append(chunk)
 
-            # 移动起始位置，使用 overlap 实现重叠
-            start = end - self.data_config.overlap if end < text_len else end
+            if end >= text_len:
+                break
+            step = end - start - self.data_config.overlap
+            start = start + max(1, step)
 
         return chunks
 
@@ -204,6 +225,10 @@ class NovelDatasetProcessor:
         Returns:
             包含 train、val、test 三个列表的字典
         """
+        total = train_ratio + val_ratio + test_ratio
+        if abs(total - 1.0) > 0.001:
+            raise ValueError(f"Ratios must sum to 1.0, got {total}")
+
         random.seed(42)
 
         # 先划分出测试集
@@ -263,7 +288,12 @@ class NovelDatasetProcessor:
         training_data = self.create_training_data(texts, prompt_template)
 
         print("Splitting data...")
-        split_data = self.split_data(training_data)
+        split_data = self.split_data(
+            training_data,
+            train_ratio=self.data_config.train_ratio,
+            val_ratio=self.data_config.val_ratio,
+            test_ratio=self.data_config.test_ratio,
+        )
 
         print("Saving processed data...")
         self.save_data(split_data, output_dir)
