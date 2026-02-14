@@ -52,6 +52,37 @@ YourNovelHelper/
 
 ---
 
+## 项目流程
+
+```mermaid
+flowchart TD
+    subgraph 数据准备
+        A1[原始小说数据] --> A2[数据预处理<br/>src/data/preprocess.py]
+        A2 --> A3[train.jsonl<br/>val.jsonl<br/>test.jsonl]
+    end
+
+    subgraph 模型训练
+        A3 --> B1[加载预训练模型<br/>Qwen3-4B]
+        B1 --> B2[配置LoRA/QLoRA]
+        B2 --> B3[加载训练数据]
+        B3 --> B4[执行训练<br/>src/training/train.py]
+        B4 --> B5[LoRA Checkpoint]
+        B5 --> B6[合并导出模型<br/>models/novel-qlora]
+    end
+
+    subgraph 模型使用
+        B6 --> C1[命令行工具<br/>src/inference/generate.py]
+        B6 --> C2[FastAPI服务<br/>src/api/main.py]
+        B6 --> C3[Web UI界面<br/>src/api/webui.py]
+    end
+
+    style A1 fill:#e1f5fe
+    style B1 fill:#e8f5e9
+    style C1 fill:#fff3e0
+```
+
+---
+
 ## 快速开始
 
 ### 1. 创建虚拟环境并安装依赖
