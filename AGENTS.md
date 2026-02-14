@@ -8,8 +8,17 @@ preprocessing, training, inference, API, and WebUI components.
 ## 1. Build/Lint/Test Commands
 
 ```bash
-# Activate virtual environment
+# Use uv to manage Python environment (recommended)
+uv venv
 source .venv/bin/activate
+
+# Install dependencies
+uv pip install torch transformers peft datasets trl accelerate pyyaml
+uv pip install fastapi uvicorn gradio jieba tqdm scikit-learn
+uv pip install modelscope
+
+# Or install project
+uv pip install -e .
 
 # Data preprocessing
 python -m src.data.preprocess --raw-dir data/raw --output-dir data/processed
