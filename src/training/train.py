@@ -7,12 +7,9 @@
 - 导出合并后的完整模型
 """
 
-import os
 import sys
-import json
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Optional
 
 import yaml
 import torch
@@ -236,43 +233,40 @@ class NovelTrainer:
         }
 
         def tokenize_function(examples):
-            """
-            tokenize 函数
-
-            将 prompt 和 response 分别 tokenize，然后拼接。
-            labels 中 prompt 部分设为 -100，只计算 response 的 loss。
-            """
             prompts = examples["prompt"]
             responses = examples["response"]
 
-            input_ids = []
+            prompt_encoded = tokenizer(
+                prompts,
+                truncation=True,
+                max_length=self.train_config.max_seq_length,
+                padding="max_length",
+                return_tensors=None,
+            )
+
+            full_encoded = tokenizer(
+                prompts,
+                responses,
+                truncation=True,
+                max_length=self.train_config.max_seq_length,
+                padding="max_length",
+                return_tensors=None,
+            )
+
             labels = []
-
-            for prompt, response in zip(prompts, responses):
-                prompt_ids = tokenizer(prompt, add_special_tokens=False)["input_ids"]
-                response_ids = tokenizer(response, add_special_tokens=False)[
-                    "input_ids"
-                ]
-
-                # 拼接 prompt 和 response
-                input_id = prompt_ids + response_ids
-                # prompt 部分设为 -100，保留 response 部分
-                label = [-100] * len(prompt_ids) + response_ids
-
-                # 截断过长的序列
-                if len(input_id) > self.train_config.max_seq_length:
-                    input_id = input_id[: self.train_config.max_seq_length]
-                    label = label[: self.train_config.max_seq_length]
-
-                # padding 到固定长度
-                while len(input_id) < self.train_config.max_seq_length:
-                    input_id.append(tokenizer.pad_token_id)
-                    label.append(-100)
-
-                input_ids.append(input_id)
+            for i in range(len(full_encoded["input_ids"])):
+                prompt_len = prompt_encoded["attention_mask"][i].sum()
+                label = full_encoded["input_ids"][i].tolist()
+                for j in range(prompt_len):
+                    if j < len(label):
+                        label[j] = -100
                 labels.append(label)
 
-            return {"input_ids": input_ids, "labels": labels}
+            return {
+                "input_ids": full_encoded["input_ids"],
+                "labels": labels,
+                "attention_mask": full_encoded["attention_mask"],
+            }
 
         datasets = {}
         for split, path in data_config.items():
@@ -281,13 +275,20 @@ class NovelTrainer:
                 continue
 
             print(f"Loading {split} dataset from {path}...")
-            ds = load_dataset("json", data_files=path, split="train")
+            ds = load_dataset(
+                "json",
+                data_files=path,
+                split="train",
+                num_proc=2,
+            )
             ds = ds.map(
                 tokenize_function,
                 batched=True,
+                batch_size=1000,
                 remove_columns=ds.column_names,
                 desc=f"Tokenizing {split}",
             )
+            ds.set_format("torch")
             datasets[split] = ds
 
         return datasets
@@ -329,6 +330,9 @@ class NovelTrainer:
             evaluation_strategy="steps" if "validation" in datasets else "no",
             report_to=["tensorboard"],
             remove_unused_columns=False,
+            dataloader_num_workers=2,
+            dataloader_pin_memory=True,
+            max_steps=-1,
         )
 
         # 数据整理器
