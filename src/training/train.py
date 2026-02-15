@@ -271,16 +271,31 @@ class NovelTrainer:
         对 prompt-response 数据进行 tokenize，构建 input_ids 和 labels。
         prompt 部分使用 -100 填充，使得训练时只计算 response 的 loss。
 
+        支持缓存：如果 tokenized 数据已存在且源文件未修改，则直接加载缓存。
+
         Args:
             tokenizer: 分词器对象
 
         Returns:
             包含 train 和 validation 数据集的字典
         """
+        import hashlib
+        import time
+
         data_config = {
             "train": "data/processed/train.jsonl",
             "validation": "data/processed/val.jsonl",
         }
+
+        cache_dir = Path("data/processed/cache")
+        cache_dir.mkdir(parents=True, exist_ok=True)
+
+        def get_file_hash(path: Path) -> str:
+            """获取文件hash用于判断是否需要重新tokenize"""
+            if not path.exists():
+                return ""
+            mtime = str(path.stat().st_mtime)
+            return hashlib.md5(f"{path.name}{mtime}".encode()).hexdigest()[:8]
 
         def tokenize_function(examples):
             prompts = examples["prompt"]
@@ -324,22 +339,41 @@ class NovelTrainer:
                 print(f"Warning: {path} not found, skipping {split}")
                 continue
 
-            print(f"Loading {split} dataset from {path}...")
-            ds = load_dataset(
-                "json",
-                data_files=path,
-                split="train",
-                num_proc=min(4, os.cpu_count() or 4),
-            )
-            ds = ds.map(
-                tokenize_function,
-                batched=True,
-                batch_size=1000,
-                remove_columns=ds.column_names,
-                desc=f"Tokenizing {split}",
-                num_proc=min(4, os.cpu_count() or 4),
-            )
-            ds.set_format("torch")
+            cache_file = cache_dir / f"{split}_cached"
+            source_hash = get_file_hash(Path(path))
+            hash_file = cache_dir / f"{split}_hash.txt"
+
+            use_cache = False
+            if cache_file.exists() and hash_file.exists():
+                cached_hash = hash_file.read_text().strip()
+                if cached_hash == source_hash:
+                    print(f"Loading {split} dataset from cache...")
+                    ds = load_dataset("json", data_files=str(cache_file), split="train")
+                    ds.set_format("torch")
+                    use_cache = True
+
+            if not use_cache:
+                print(f"Loading {split} dataset from {path}...")
+                ds = load_dataset(
+                    "json",
+                    data_files=path,
+                    split="train",
+                    num_proc=min(4, os.cpu_count() or 4),
+                )
+                ds = ds.map(
+                    tokenize_function,
+                    batched=True,
+                    batch_size=1000,
+                    remove_columns=ds.column_names,
+                    desc=f"Tokenizing {split}",
+                    num_proc=min(4, os.cpu_count() or 4),
+                )
+                ds.set_format("torch")
+
+                print(f"Saving {split} dataset to cache...")
+                ds.to_json(str(cache_file))
+                hash_file.write_text(source_hash)
+
             datasets[split] = ds
 
         return datasets
