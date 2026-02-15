@@ -142,29 +142,24 @@ class NovelTrainer:
         Returns:
             tokenizer 对象
         """
-        is_modelscope = MODELSCOPE_AVAILABLE and (
-            not Path(self.model_name).exists()
-            or str(self.model_name).startswith("qwen/")
-            or "/" not in str(self.model_name)
-        )
+        use_local = Path(self.model_name).exists()
 
-        model_id = (
-            self.model_name
-            if "/" in str(self.model_name)
-            else f"qwen/{self.model_name}"
-        )
-
-        print(f"Loading tokenizer from {model_id}...")
-
-        if is_modelscope:
-            tokenizer = MsAutoTokenizer.from_pretrained(
-                model_id,
+        if use_local:
+            print(f"Loading tokenizer from local: {self.model_name}...")
+            tokenizer = AutoTokenizer.from_pretrained(
+                self.model_name,
                 trust_remote_code=self.trust_remote_code,
                 padding_side="right",
             )
         else:
-            tokenizer = AutoTokenizer.from_pretrained(
-                self.model_name,
+            model_id = (
+                self.model_name
+                if "/" in str(self.model_name)
+                else f"qwen/{self.model_name}"
+            )
+            print(f"Loading tokenizer from ModelScope: {model_id}...")
+            tokenizer = MsAutoTokenizer.from_pretrained(
+                model_id,
                 trust_remote_code=self.trust_remote_code,
                 padding_side="right",
             )
@@ -184,19 +179,7 @@ class NovelTrainer:
         Returns:
             应用 LoRA 后的模型
         """
-        is_modelscope = MODELSCOPE_AVAILABLE and (
-            not Path(self.model_name).exists()
-            or str(self.model_name).startswith("qwen/")
-            or "/" not in str(self.model_name)
-        )
-
-        model_id = (
-            self.model_name
-            if "/" in str(self.model_name)
-            else f"qwen/{self.model_name}"
-        )
-
-        print(f"Loading model from {model_id}...")
+        use_local = Path(self.model_name).exists()
 
         import io
         import sys
@@ -211,9 +194,10 @@ class NovelTrainer:
 
         with open(os.devnull, "w") as devnull:
             with redirect_stdout(devnull), redirect_stderr(devnull):
-                if is_modelscope:
-                    model = MsAutoModelForCausalLM.from_pretrained(
-                        model_id,
+                if use_local:
+                    print(f"Loading model from local: {self.model_name}...")
+                    model = AutoModelForCausalLM.from_pretrained(
+                        self.model_name,
                         trust_remote_code=self.trust_remote_code,
                         torch_dtype=torch.bfloat16
                         if self.train_config.bf16
@@ -222,8 +206,14 @@ class NovelTrainer:
                         quantization_config=quantization_config,
                     )
                 else:
-                    model = AutoModelForCausalLM.from_pretrained(
-                        self.model_name,
+                    model_id = (
+                        self.model_name
+                        if "/" in str(self.model_name)
+                        else f"qwen/{self.model_name}"
+                    )
+                    print(f"Loading model from ModelScope: {model_id}...")
+                    model = MsAutoModelForCausalLM.from_pretrained(
+                        model_id,
                         trust_remote_code=self.trust_remote_code,
                         torch_dtype=torch.bfloat16
                         if self.train_config.bf16

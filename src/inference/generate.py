@@ -69,15 +69,24 @@ class NovelGenerator:
         """
         加载预训练模型和分词器
 
-        支持从 ModelScope 或本地路径加载模型
+        支持从本地或ModelScope加载模型（本地优先）
         """
-        is_modelscope = MODELSCOPE_AVAILABLE and (
-            Path(self.model_path).exists() is False
-            or str(self.model_path).startswith("qwen/")
-            or "/" not in str(self.model_path)
-        )
+        use_local = Path(self.model_path).exists()
 
-        if is_modelscope:
+        if use_local:
+            print(f"Loading model from {self.model_path}...")
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                self.model_path, trust_remote_code=True
+            )
+            if self.tokenizer.pad_token is None:
+                self.tokenizer.pad_token = self.tokenizer.eos_token
+            self.model = AutoModelForCausalLM.from_pretrained(
+                self.model_path,
+                trust_remote_code=True,
+                torch_dtype=torch.bfloat16,
+                device_map="auto",
+            )
+        else:
             model_name = (
                 self.model_path
                 if "/" in str(self.model_path)
@@ -90,21 +99,6 @@ class NovelGenerator:
             self.model = MsAutoModelForCausalLM.from_pretrained(
                 model_name,
                 trust_remote_code=True,
-                device_map="auto",
-            )
-        else:
-            if not Path(self.model_path).exists():
-                raise FileNotFoundError(f"Model not found at {self.model_path}")
-            print(f"Loading model from {self.model_path}...")
-            self.tokenizer = AutoTokenizer.from_pretrained(
-                self.model_path, trust_remote_code=True
-            )
-            if self.tokenizer.pad_token is None:
-                self.tokenizer.pad_token = self.tokenizer.eos_token
-            self.model = AutoModelForCausalLM.from_pretrained(
-                self.model_path,
-                trust_remote_code=True,
-                torch_dtype=torch.bfloat16,
                 device_map="auto",
             )
 
