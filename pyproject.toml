@@ -21,4 +21,6 @@ dependencies = [
     "jieba>=0.42.0",
     "tqdm>=4.66.0",
     "tensorboard>=2.15.0",
+    "modelscope>=1.9.0",
+    "bitsandbytes>=0.46.1",
 ]
