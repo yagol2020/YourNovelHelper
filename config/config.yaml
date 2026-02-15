@@ -4,7 +4,7 @@ model:
   
 training:
   method: qlora
-  lora_rank: 8
+  lora_rank: 16
   lora_alpha: 32
   lora_dropout: 0.05
   target_modules:
@@ -16,10 +16,10 @@ training:
     - up_proj
     - down_proj
   
-  per_device_batch_size: 2
-  gradient_accumulation_steps: 4
+  per_device_batch_size: 4
+  gradient_accumulation_steps: 2
   bf16: true
-  gradient_checkpointing: true
+  gradient_checkpointing: false
   optim: adamw_torch
   
 data:
