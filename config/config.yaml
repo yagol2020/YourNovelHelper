@@ -21,6 +21,7 @@ training:
   bf16: true
   gradient_checkpointing: true
   optim: adamw_torch
+  report_to: ["tensorboard"]
   
 data:
   chunk_size: 128

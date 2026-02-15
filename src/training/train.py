@@ -95,6 +95,7 @@ class TrainConfig:
     bf16: bool = True
     gradient_checkpointing: bool = True
     optim: str = "adamw_torch"
+    report_to: list = field(default_factory=lambda: ["none"])
 
     # 输出配置
     output_dir: str = "models/checkpoints"
@@ -378,7 +379,7 @@ class NovelTrainer:
             save_total_limit=3,
             load_best_model_at_end=True,
             eval_strategy="steps" if "validation" in datasets else "no",
-            report_to=["none"],
+            report_to=self.train_config.report_to,
             remove_unused_columns=False,
             dataloader_num_workers=4,
             dataloader_pin_memory=True,
