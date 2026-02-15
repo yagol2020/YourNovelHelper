@@ -1,0 +1,43 @@
+services:
+  novel-api:
+    build: .
+    image: your-novel-helper:latest
+    container_name: novel-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data/raw:/app/data/raw
+      - ./data/processed:/app/data/processed
+      - ${MODEL_PATH:-./models}:/app/models
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  novel-webui:
+    build: .
+    image: your-novel-helper:latest
+    container_name: novel-webui
+    ports:
+      - "7860:7860"
+    volumes:
+      - ./data/raw:/app/data/raw
+      - ./data/processed:/app/data/processed
+      - ${MODEL_PATH:-./models}:/app/models
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command: ["python", "-m", "src.api.webui"]
+    restart: unless-stopped

@@ -7,10 +7,10 @@ FastAPI 服务模块
 - 健康检查
 """
 
+import os
 import sys
 from pathlib import Path
 
-# 添加项目根目录到 Python 路径
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.inference.generate import NovelGenerator
@@ -22,6 +22,11 @@ from typing import Optional
 import yaml
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
+
+
+MODEL_PATH = os.getenv("MODEL_PATH", "models/Qwen3-4B")
+LORA_PATH = os.getenv("LORA_PATH", "models/checkpoints/checkpoint-3")
+CONFIG_PATH = os.getenv("CONFIG_PATH", "config/config.yaml")
 
 
 # 创建 FastAPI 应用
@@ -64,17 +69,10 @@ generator = None
 
 @app.on_event("startup")
 async def startup_event():
-    """
-    应用启动时的事件处理器
-
-    尝试加载模型，如果失败不影响 API 启动（只是生成接口不可用）
-    """
     global generator
-    config_path = "config/config.yaml"
-    model_path = "models/novel-qlora"
 
     try:
-        generator = NovelGenerator(model_path, config_path)
+        generator = NovelGenerator(MODEL_PATH, LORA_PATH, CONFIG_PATH)
         generator.load_model()
     except Exception as e:
         print(f"Warning: Could not load model: {e}")
