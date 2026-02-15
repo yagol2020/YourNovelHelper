@@ -16,10 +16,10 @@ training:
     - up_proj
     - down_proj
   
-  per_device_batch_size: 4
-  gradient_accumulation_steps: 2
+  per_device_batch_size: 2
+  gradient_accumulation_steps: 4
   bf16: true
-  gradient_checkpointing: false
+  gradient_checkpointing: true
   optim: adamw_torch
   
 data:
