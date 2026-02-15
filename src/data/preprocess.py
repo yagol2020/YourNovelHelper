@@ -115,7 +115,8 @@ class NovelDatasetProcessor:
         if txt_files:
             args_list = [(str(f), self.data_config.min_text_length) for f in txt_files]
 
-            with ProcessPoolExecutor() as executor:
+            workers = min(4, len(txt_files))
+            with ProcessPoolExecutor(max_workers=workers) as executor:
                 futures = {
                     executor.submit(_load_text_file, args): args[0]
                     for args in args_list
@@ -165,7 +166,8 @@ class NovelDatasetProcessor:
             for text in texts
         ]
 
-        with ProcessPoolExecutor() as executor:
+        workers = min(4, len(texts))
+        with ProcessPoolExecutor(max_workers=workers) as executor:
             all_chunks_list = list(
                 tqdm(
                     executor.map(_split_into_chunks_worker, args_list),

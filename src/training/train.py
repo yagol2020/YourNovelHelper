@@ -328,7 +328,7 @@ class NovelTrainer:
                 "json",
                 data_files=path,
                 split="train",
-                num_proc=os.cpu_count() or 4,
+                num_proc=min(4, os.cpu_count() or 4),
             )
             ds = ds.map(
                 tokenize_function,
@@ -336,7 +336,7 @@ class NovelTrainer:
                 batch_size=1000,
                 remove_columns=ds.column_names,
                 desc=f"Tokenizing {split}",
-                num_proc=os.cpu_count() or 4,
+                num_proc=min(4, os.cpu_count() or 4),
             )
             ds.set_format("torch")
             datasets[split] = ds
