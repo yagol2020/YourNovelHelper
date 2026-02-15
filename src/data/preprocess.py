@@ -5,12 +5,12 @@
 输出可用于 LoRA 微调的 prompt-response 对。
 """
 
-import os
 import json
 import random
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
+from concurrent.futures import ProcessPoolExecutor, as_completed
 import argparse
 
 import yaml
@@ -31,6 +31,48 @@ class DataConfig:
     max_text_length: int = 10000
     chunk_size: int = 512
     overlap: int = 50
+
+
+def _load_text_file(args):
+    """处理单个文本文件，用于多进程"""
+    file_path, min_text_length = args
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        if len(content) >= min_text_length:
+            return content
+    except Exception as e:
+        print(f"Error reading {file_path}: {e}")
+    return None
+
+
+def _split_into_chunks_worker(args):
+    """处理单个文本的chunk分割"""
+    text, chunk_size, overlap = args
+    chunks = []
+    start = 0
+    text_len = len(text)
+
+    while start < text_len:
+        end = min(start + chunk_size, text_len)
+
+        if end < text_len:
+            for punct in ["。", "！", "？", "\n"]:
+                last_punct = text.rfind(punct, start, end)
+                if last_punct > start:
+                    end = last_punct + 1
+                    break
+
+        chunk = text[start:end].strip()
+        if chunk:
+            chunks.append(chunk)
+
+        if end >= text_len:
+            break
+        step = end - start - overlap
+        start = start + max(1, step)
+
+    return chunks
 
 
 class NovelDatasetProcessor:
@@ -59,37 +101,36 @@ class NovelDatasetProcessor:
 
     def load_raw_texts(self, raw_dir: Optional[str] = None) -> List[str]:
         """
-        从指定目录加载原始文本文件
+        从指定目录加载原始文本文件（多进程）
 
         支持两种格式：
         - .txt 文件：直接读取文件内容
         - .json 文件：支持 list 格式或包含 texts 字段的 dict 格式
-
-        Args:
-            raw_dir: 原始数据目录路径，默认为配置中的 raw_dir
-
-        Returns:
-            文本列表
         """
         raw_dir = raw_dir or self.data_config.raw_dir
         texts = []
 
-        # 读取 txt 文件
-        for file in Path(raw_dir).glob("**/*.txt"):
-            try:
-                with open(file, "r", encoding="utf-8") as f:
-                    content = f.read()
-                    if len(content) >= self.data_config.min_text_length:
-                        texts.append(content)
-            except Exception as e:
-                print(f"Error reading {file}: {e}")
+        txt_files = list(Path(raw_dir).glob("**/*.txt"))
 
-        # 读取 json 文件
+        if txt_files:
+            args_list = [(str(f), self.data_config.min_text_length) for f in txt_files]
+
+            with ProcessPoolExecutor() as executor:
+                futures = {
+                    executor.submit(_load_text_file, args): args[0]
+                    for args in args_list
+                }
+                for future in tqdm(
+                    as_completed(futures), total=len(futures), desc="Loading texts"
+                ):
+                    result = future.result()
+                    if result:
+                        texts.append(result)
+
         for file in Path(raw_dir).glob("**/*.json"):
             try:
                 with open(file, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                    # 支持 list 格式: [{"text": "..."}, ...]
                     if isinstance(data, list):
                         for item in data:
                             if isinstance(item, dict) and "text" in item:
@@ -100,7 +141,6 @@ class NovelDatasetProcessor:
                                 continue
                             if len(text) >= self.data_config.min_text_length:
                                 texts.append(text)
-                    # 支持 dict 格式: {"texts": ["...", ...]}
                     elif isinstance(data, dict):
                         if "texts" in data:
                             for text in data["texts"]:
@@ -116,30 +156,29 @@ class NovelDatasetProcessor:
         self, texts: List[str], prompt_template: str
     ) -> List[Dict[str, str]]:
         """
-        将文本转换为训练数据格式
-
-        将每段文本分割成 chunk，相邻的 chunk 组成 prompt-response 对，
-        用于训练模型的续写能力。
-
-        Args:
-            texts: 原始文本列表
-            prompt_template: prompt 模板字符串
-
-        Returns:
-            训练数据列表，每项包含 prompt、response 和 text 字段
+        将文本转换为训练数据格式（多进程）
         """
         training_data = []
 
-        for text in tqdm(texts, desc="Creating training data"):
-            # 将文本分割成多个 chunk
-            chunks = self._split_into_chunks(text)
+        args_list = [
+            (text, self.data_config.chunk_size, self.data_config.overlap)
+            for text in texts
+        ]
 
-            # 相邻 chunk 组成训练对：chunk[i] 作为 prompt，chunk[i+1] 作为续写
+        with ProcessPoolExecutor() as executor:
+            all_chunks_list = list(
+                tqdm(
+                    executor.map(_split_into_chunks_worker, args_list),
+                    total=len(texts),
+                    desc="Splitting chunks",
+                )
+            )
+
+        for chunks in tqdm(all_chunks_list, desc="Creating training data"):
             for i in range(len(chunks) - 1):
                 prompt = chunks[i]
                 continuation = chunks[i + 1]
 
-                # 过滤掉太短的 chunk
                 if len(prompt) < 50 or len(continuation) < 50:
                     continue
 
@@ -168,44 +207,6 @@ class NovelDatasetProcessor:
 
         return training_data
 
-    def _split_into_chunks(self, text: str) -> List[str]:
-        """
-        将文本分割成多个 chunk
-
-        按照标点符号（句号、感叹号、问号、换行）进行断句，
-        每个 chunk 长度不超过 chunk_size，相邻 chunk 之间有 overlap 重叠。
-
-        Args:
-            text: 待分割的文本
-
-        Returns:
-            chunk 列表
-        """
-        chunks = []
-        start = 0
-        text_len = len(text)
-
-        while start < text_len:
-            end = min(start + self.data_config.chunk_size, text_len)
-
-            if end < text_len:
-                for punct in ["。", "！", "？", "\n"]:
-                    last_punct = text.rfind(punct, start, end)
-                    if last_punct > start:
-                        end = last_punct + 1
-                        break
-
-            chunk = text[start:end].strip()
-            if chunk:
-                chunks.append(chunk)
-
-            if end >= text_len:
-                break
-            step = end - start - self.data_config.overlap
-            start = start + max(1, step)
-
-        return chunks
-
     def split_data(
         self,
         data: List[Any],
@@ -213,41 +214,22 @@ class NovelDatasetProcessor:
         val_ratio: float = 0.1,
         test_ratio: float = 0.1,
     ) -> Dict[str, List]:
-        """
-        划分训练集、验证集和测试集
-
-        Args:
-            data: 待划分的数据列表
-            train_ratio: 训练集比例
-            val_ratio: 验证集比例
-            test_ratio: 测试集比例
-
-        Returns:
-            包含 train、val、test 三个列表的字典
-        """
+        """划分训练集、验证集和测试集"""
         total = train_ratio + val_ratio + test_ratio
         if abs(total - 1.0) > 0.001:
             raise ValueError(f"Ratios must sum to 1.0, got {total}")
 
         random.seed(42)
 
-        # 先划分出测试集
         train_val, test = train_test_split(data, test_size=test_ratio, random_state=42)
 
-        # 再从剩余数据中划分验证集
         val_size = val_ratio / (train_ratio + val_ratio)
         train, val = train_test_split(train_val, test_size=val_size, random_state=42)
 
         return {"train": train, "val": val, "test": test}
 
     def save_data(self, data: Dict[str, List[Any]], output_dir: str):
-        """
-        将处理后的数据保存为 JSONL 格式
-
-        Args:
-            data: 包含 train、val、test 的数据字典
-            output_dir: 输出目录
-        """
+        """将处理后的数据保存为 JSONL 格式"""
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
 
@@ -260,18 +242,7 @@ class NovelDatasetProcessor:
             print(f"Saved {len(split_data)} samples to {file_path}")
 
     def process(self, raw_dir: str = "data/raw", output_dir: str = "data/processed"):
-        """
-        执行完整的数据处理流程
-
-        1. 加载原始文本
-        2. 创建训练数据
-        3. 划分数据集
-        4. 保存结果
-
-        Args:
-            raw_dir: 原始数据目录
-            output_dir: 输出目录
-        """
+        """执行完整的数据处理流程"""
         print("Loading raw texts...")
         texts = self.load_raw_texts(raw_dir)
 
@@ -279,7 +250,6 @@ class NovelDatasetProcessor:
             print("No texts found. Please add your novel data to data/raw/")
             return
 
-        # 从配置中获取 prompt 模板
         prompt_template = self.config.get("data", {}).get(
             "prompt_template", "请根据以下风格续写小说：{prompt}\n\n请续写："
         )
@@ -289,12 +259,10 @@ class NovelDatasetProcessor:
 
         if not training_data:
             print(
-                "Error: No training data created. Possible causes:\n"
-                "  - Texts are too short (min chunk_size: {})\n"
-                "  - Chunks shorter than 50 chars (filtered out)\n"
-                "  - Please check your raw data or adjust chunk_size in config".format(
-                    self.data_config.chunk_size
-                )
+                f"Error: No training data created. Possible causes:\n"
+                f"  - Texts are too short (min chunk_size: {self.data_config.chunk_size})\n"
+                f"  - Chunks shorter than 50 chars (filtered out)\n"
+                f"  - Please check your raw data or adjust chunk_size in config"
             )
             return
 
@@ -316,7 +284,6 @@ class NovelDatasetProcessor:
 
 
 def main():
-    """命令行入口函数"""
     parser = argparse.ArgumentParser(description="Process novel data for training")
     parser.add_argument(
         "--raw-dir", type=str, default="data/raw", help="Raw data directory"
