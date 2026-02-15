@@ -17,28 +17,62 @@ fi
 echo "Python version: $PYTHON_VERSION ✓"
 echo ""
 
-# 检查uv是否安装
-if ! command -v uv &> /dev/null; then
-    echo "Installing uv..."
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-    source "$HOME/.local/bin/env" 2>/dev/null || source "$HOME/.local/uv/uv.sh" 2>/dev/null || true
+# 询问是否使用现有环境
+echo "请选择环境配置方式:"
+echo "  1) 创建新的虚拟环境 (推荐)"
+echo "  2) 使用当前Python环境"
+read -p "请输入选项 [1]: " ENV_OPTION
+ENV_OPTION=${ENV_OPTION:-1}
+
+if [ "$ENV_OPTION" == "1" ]; then
+    echo ""
+    # 询问是否安装uv
+    if command -v uv &> /dev/null; then
+        echo "检测到已安装 uv ✓"
+        USE_UV=true
+    else
+        echo ""
+        echo "是否安装 uv (现代化的Python包管理工具，比pip更快)?"
+        echo "  1) 安装 uv (推荐)"
+        echo "  2) 使用传统的 venv"
+        read -p "请输入选项 [1]: " UV_OPTION
+        UV_OPTION=${UV_OPTION:-1}
+        
+        if [ "$UV_OPTION" == "1" ]; then
+            echo ""
+            echo "Installing uv..."
+            curl -LsSf https://astral.sh/uv/install.sh | sh
+            USE_UV=true
+        else
+            USE_UV=false
+        fi
+    fi
+    
+    echo ""
+    echo "创建虚拟环境..."
+    if [ "$USE_UV" == "true" ]; then
+        uv venv .venv
+    else
+        python3 -m venv .venv
+    fi
+    source .venv/bin/activate
+    echo "虚拟环境创建完成 ✓"
+else
+    echo "使用当前环境"
+    echo "建议先创建虚拟环境: python3 -m venv .venv && source .venv/bin/activate"
+    echo ""
 fi
 
-echo "uv installed ✓"
 echo ""
-
-# 创建虚拟环境
-echo "Creating virtual environment..."
-uv venv .venv
-source .venv/bin/activate
-
-echo "Virtual environment created ✓"
-echo ""
-
-# 安装依赖
 echo "Installing dependencies..."
-uv pip install torch transformers peft datasets trl accelerate pyyaml
-uv pip install fastapi uvicorn gradio jieba tqdm scikit-learn
+
+if [ "$USE_UV" == "true" ]; then
+    uv pip install torch transformers peft datasets trl accelerate pyyaml
+    uv pip install fastapi uvicorn gradio jieba tqdm scikit-learn
+else
+    pip install torch transformers peft datasets trl accelerate pyyaml
+    pip install fastapi uvicorn gradio jieba tqdm scikit-learn
+fi
 
 echo ""
 echo "=== 安装完成 ==="
