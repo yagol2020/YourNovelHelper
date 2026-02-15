@@ -115,7 +115,7 @@ async def generate(request: GenerateRequest):
     generator.repetition_penalty = request.repetition_penalty
 
     try:
-        result = generator.generate(request.prompt, request.style)
+        result = generator.generate(request.prompt, request.style or "")
     finally:
         # 恢复原有参数，避免影响其他请求
         generator.max_new_tokens = old_max_tokens
