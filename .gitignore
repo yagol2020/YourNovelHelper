@@ -35,6 +35,10 @@ env/
 # Ruff
 .ruff_cache/
 
+# Data directories (large training data)
+data/raw/
+data/processed/
+
 # Models (large files, may contain sensitive data)
 models/
 logs/

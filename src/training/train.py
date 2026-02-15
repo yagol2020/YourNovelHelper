@@ -8,11 +8,28 @@
 """
 
 import sys
+import logging
+import os
 from pathlib import Path
 from dataclasses import dataclass, field
 
 import yaml
 import torch
+from transformers import logging as transformers_logging
+
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["TRANSFORMERS_VERBOSITY"] = "error"
+os.environ["HF_HUB_DISABLE_PROGRESS"] = "1"
+os.environ["MODELSCOPE_SDK_NO_PROGRESS_BAR"] = "1"
+os.environ["MODELSCOPE_DOWNLOAD_PROGRESS"] = "0"
+os.environ["TQDM_DISABLE"] = "1"
+
+transformers_logging.set_verbosity_error()
+logging.getLogger("transformers").setLevel(logging.ERROR)
+logging.getLogger("modelscope").setLevel(logging.ERROR)
+logging.getLogger("peft").setLevel(logging.ERROR)
+logging.getLogger("transformers.modeling_utils").setLevel(logging.ERROR)
+logging.getLogger("transformers.modeling_utils").propagate = False
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -26,6 +43,7 @@ from peft import (
     TaskType,
     PeftModel,
 )
+from transformers import BitsAndBytesConfig
 from datasets import load_dataset
 
 try:
@@ -66,10 +84,11 @@ class TrainConfig:
     gradient_accumulation_steps: int = 4
     learning_rate: float = 1e-4
     num_epochs: int = 3
+    max_steps: int = -1
     warmup_steps: int = 100
-    logging_steps: int = 10
-    save_steps: int = 500
-    eval_steps: int = 500
+    logging_steps: int = 5
+    save_steps: int = 100
+    eval_steps: int = 100
     max_seq_length: int = 2048
 
     # 训练选项
@@ -103,7 +122,13 @@ class NovelTrainer:
         # 从配置文件中覆盖默认参数
         for key, value in config.get("training", {}).items():
             if hasattr(self.train_config, key):
-                setattr(self.train_config, key, value)
+                field_type = type(getattr(self.train_config, key))
+                try:
+                    if field_type == float and isinstance(value, str):
+                        value = float(value)
+                    setattr(self.train_config, key, value)
+                except (ValueError, TypeError):
+                    pass
 
         self.model_name = config.get("model", {}).get(
             "name", self.train_config.model_name
@@ -173,22 +198,46 @@ class NovelTrainer:
 
         print(f"Loading model from {model_id}...")
 
-        if is_modelscope:
-            model = MsAutoModelForCausalLM.from_pretrained(
-                model_id,
-                trust_remote_code=self.trust_remote_code,
-                device_map="auto",
-            )
-        else:
-            model = AutoModelForCausalLM.from_pretrained(
-                self.model_name,
-                trust_remote_code=self.trust_remote_code,
-                torch_dtype=torch.bfloat16 if self.train_config.bf16 else torch.float32,
-                device_map="auto",
-            )
+        import io
+        import sys
+        from contextlib import redirect_stdout, redirect_stderr
+
+        quantization_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.bfloat16,
+            bnb_4bit_use_double_quant=True,
+        )
+
+        with open(os.devnull, "w") as devnull:
+            with redirect_stdout(devnull), redirect_stderr(devnull):
+                if is_modelscope:
+                    model = MsAutoModelForCausalLM.from_pretrained(
+                        model_id,
+                        trust_remote_code=self.trust_remote_code,
+                        torch_dtype=torch.bfloat16
+                        if self.train_config.bf16
+                        else torch.float32,
+                        device_map="auto",
+                        quantization_config=quantization_config,
+                    )
+                else:
+                    model = AutoModelForCausalLM.from_pretrained(
+                        self.model_name,
+                        trust_remote_code=self.trust_remote_code,
+                        torch_dtype=torch.bfloat16
+                        if self.train_config.bf16
+                        else torch.float32,
+                        device_map="auto",
+                        quantization_config=quantization_config,
+                    )
 
         model = self._setup_lora(model)
-        model.print_trainable_parameters()
+        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        all_params = sum(p.numel() for p in model.parameters())
+        print(
+            f"trainable params: {trainable_params:,} || all params: {all_params:,} || trainable%: {100 * trainable_params / all_params:.4f}"
+        )
 
         return model
 
@@ -255,8 +304,8 @@ class NovelTrainer:
 
             labels = []
             for i in range(len(full_encoded["input_ids"])):
-                prompt_len = prompt_encoded["attention_mask"][i].sum()
-                label = full_encoded["input_ids"][i].tolist()
+                prompt_len = sum(prompt_encoded["attention_mask"][i])
+                label = full_encoded["input_ids"][i][:]
                 for j in range(prompt_len):
                     if j < len(label):
                         label[j] = -100
@@ -327,12 +376,13 @@ class NovelTrainer:
             optim=self.train_config.optim,
             save_total_limit=3,
             load_best_model_at_end=True,
-            evaluation_strategy="steps" if "validation" in datasets else "no",
-            report_to=["tensorboard"],
+            eval_strategy="steps" if "validation" in datasets else "no",
+            report_to=["none"],
             remove_unused_columns=False,
-            dataloader_num_workers=2,
+            dataloader_num_workers=4,
             dataloader_pin_memory=True,
-            max_steps=-1,
+            max_steps=self.train_config.max_steps,
+            disable_tqdm=False,
         )
 
         # 数据整理器

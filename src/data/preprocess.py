@@ -287,6 +287,17 @@ class NovelDatasetProcessor:
         print("Creating training data...")
         training_data = self.create_training_data(texts, prompt_template)
 
+        if not training_data:
+            print(
+                "Error: No training data created. Possible causes:\n"
+                "  - Texts are too short (min chunk_size: {})\n"
+                "  - Chunks shorter than 50 chars (filtered out)\n"
+                "  - Please check your raw data or adjust chunk_size in config".format(
+                    self.data_config.chunk_size
+                )
+            )
+            return
+
         print("Splitting data...")
         split_data = self.split_data(
             training_data,

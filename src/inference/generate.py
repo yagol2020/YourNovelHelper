@@ -7,6 +7,7 @@
 - 可配置的生成参数（temperature、top_p、top_k 等）
 """
 
+import sys
 from pathlib import Path
 import argparse
 
@@ -107,15 +108,21 @@ class NovelGenerator:
                 device_map="auto",
             )
 
-        # 加载 LoRA 权重 (如果指定)
-        if self.lora_path and Path(self.lora_path).exists():
-            print(f"Loading LoRA weights from {self.lora_path}...")
-            self.model = PeftModel.from_pretrained(
-                self.model,
-                self.lora_path,
-                device_map="auto",
-            )
-            print("LoRA weights loaded!")
+        # 加载 LoRA 权重 (如果指定且存在)
+        if self.lora_path:
+            if Path(self.lora_path).exists():
+                print(f"Loading LoRA weights from {self.lora_path}...")
+                self.model = PeftModel.from_pretrained(
+                    self.model,
+                    self.lora_path,
+                    device_map="auto",
+                )
+                print("LoRA weights loaded!")
+            else:
+                print(
+                    f"Error: LoRA path '{self.lora_path}' not found. Please run training first or check path."
+                )
+                sys.exit(1)
 
         self.model.eval()
         print("Model loaded successfully!")
@@ -252,6 +259,13 @@ def main():
     parser.add_argument("--temperature", type=float, help="Temperature for generation")
 
     args = parser.parse_args()
+
+    # 检查 lora 路径
+    if args.lora and not Path(args.lora).exists():
+        print(
+            f"Error: LoRA path '{args.lora}' not found. Please run training first or check path."
+        )
+        sys.exit(1)
 
     generator = NovelGenerator(args.model, args.lora, args.config)
 

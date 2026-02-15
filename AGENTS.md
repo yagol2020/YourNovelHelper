@@ -1,23 +1,18 @@
 # AGENTS.md - Developer Guidelines for YourNovelHelper
 
-YourNovelHelper is a novel writing assistant based on LLM, using LoRA/QLoRA fine-tuning. The project consists of data
-preprocessing, training, inference, API, and WebUI components.
+YourNovelHelper is a novel writing assistant based on LLM, using LoRA/QLoRA fine-tuning.
 
 ---
 
 ## 1. Build/Lint/Test Commands
 
 ```bash
-# Use uv to manage Python environment (recommended)
-uv venv
-source .venv/bin/activate
+# Setup Python environment
+uv venv && source .venv/bin/activate
 
 # Install dependencies
 uv pip install torch transformers peft datasets trl accelerate pyyaml
 uv pip install fastapi uvicorn gradio jieba tqdm scikit-learn
-uv pip install modelscope
-
-# Or install project
 uv pip install -e .
 
 # Data preprocessing
@@ -35,80 +30,59 @@ python -m src.api.webui
 # CLI inference
 python -m src.inference.generate --prompt "你的小说开头" --interactive
 
-# Linting (ruff)
-ruff check src/
-ruff check src/ --fix
-ruff format src/
+# Linting
+ruff check src/ && ruff format src/
 
 # Type checking
 mypy src/
 
-# Tests (pytest)
-pytest tests/test_preprocess.py -v
-pytest tests/test_preprocess.py::test_split_into_chunks -v
-pytest tests/ --cov=src --cov-report=term-missing
+# Testing
+pytest tests/ -v                    # Run all tests
+pytest tests/test_preprocess.py -v  # Run single test file
+pytest tests/test_preprocess.py::test_split_into_chunks -v  # Run single test
+pytest tests/ --cov=src --cov-report=term-missing  # With coverage
 ```
 
 ---
 
 ## 2. Code Style Guidelines
 
-### General Principles
+### General
+- **No comments** unless explicitly requested
+- **Type hints** required for all function arguments and return values
+- **Error handling**: Use specific exception types, never bare `except:`
 
-- **No comments**: Do NOT add comments unless explicitly requested
-- **Type hints**: Use type hints for all function arguments and return values
-- **Error handling**: Use try-except with specific exception types, not bare except
-
-### Imports
-
+### Imports (order: stdlib → third-party → local)
 ```python
-# Standard library first
 import os
 import json
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-# Third-party
 import yaml
 import torch
 from transformers import AutoModelForCausalLM
 
-# Local - use absolute imports
 from src.inference.generate import NovelGenerator
 ```
 
 ### Formatting
-
-- **Line length**: Maximum 100 characters
-- **Indentation**: 4 spaces
-- **Blank lines**: Two between top-level definitions
-- **Quotes**: Double quotes, single only when string contains double quotes
+- Line length: 100 chars max
+- Indentation: 4 spaces
+- Blank lines: Two between top-level definitions
+- Quotes: Double quotes, single only when string contains double
 
 ### Naming Conventions
-
-| Type        | Convention  | Example                 |
-|-------------|-------------|-------------------------|
-| Modules     | snake_case  | `preprocess.py`         |
+| Type        | Convention  | Example                  |
+|-------------|-------------|--------------------------|
+| Modules     | snake_case  | `preprocess.py`          |
 | Classes     | PascalCase  | `NovelDatasetProcessor` |
 | Functions   | snake_case  | `load_raw_texts`        |
 | Variables   | snake_case  | `training_data`         |
 | Constants   | UPPER_SNAKE | `MAX_SEQ_LENGTH`        |
 | Dataclasses | PascalCase  | `class DataConfig:`     |
 
-### Type Annotations
-
-```python
-# Good
-def process(self, raw_dir: str = "data/raw") -> Dict[str, List[Any]]:
-    ...
-
-# Avoid
-def process(self, raw_dir="data/raw"):  # No type hints
-    ...
-```
-
 ### Dataclasses for Configuration
-
 ```python
 from dataclasses import dataclass, field
 
@@ -120,9 +94,7 @@ class DataConfig:
 ```
 
 ### Error Handling
-
 ```python
-# Good
 try:
     with open(file, "r", encoding="utf-8") as f:
         content = f.read()
@@ -130,94 +102,31 @@ except FileNotFoundError:
     print(f"Error: File {file} not found")
 except Exception as e:
     print(f"Error reading {file}: {e}")
-
-# Never do this
-try:
-    ...
-except:  # BAD
-    ...
 ```
 
-### Function Design
-
-- Keep functions under 50 lines
-- Single responsibility
-- Use early returns for error conditions
-- Prefer explicit returns over implicit None
-
-```python
-def load_texts(self, path: str) -> List[str]:
-    if not Path(path).exists():
-        return []
-    
-    texts = []
-    for file in Path(path).glob("*.txt"):
-        texts.append(self._read_file(file))
-    return texts
-```
-
-### Class Design
-
-- Use `__init__` for initialization only
-- Use private methods (prefixed with `_`) for internal logic
-
-```python
-class NovelDatasetProcessor:
-    def __init__(self, config_path: str = "config/config.yaml"):
-        with open(config_path, "r", encoding="utf-8") as f:
-            self.config = yaml.safe_load(f)
-    
-    def process(self, raw_dir: str, output_dir: str) -> None:
-        ...
-    
-    def _load_raw_texts(self) -> List[str]:
-        ...
-```
+### Function/Class Design
+- Functions under 50 lines, single responsibility
+- Early returns for error conditions
+- Explicit returns over implicit None
+- `__init__` for initialization only
+- Private methods prefixed with `_`
 
 ---
 
 ## 3. Common Patterns
 
 ### Path Handling
-
 ```python
-from pathlib import Path
-
 output_path = Path(output_dir)
 output_path.mkdir(parents=True, exist_ok=True)
-
-if Path(path).exists():
-    ...
 ```
 
-### Configuration Loading
-
-```python
-import yaml
-from dataclasses import dataclass
-
-@dataclass
-class TrainConfig:
-    model_name: str = "Qwen/Qwen3-7B"
-
-def __init__(self, config_path: str):
-    with open(config_path, "r", encoding="utf-8") as f:
-        config = yaml.safe_load(f)
-    
-    self.train_config = TrainConfig()
-    for key, value in config.get("training", {}).items():
-        if hasattr(self.train_config, key):
-            setattr(self.train_config, key, value)
-```
-
-### JSONL File Operations
-
+### JSONL Operations
 ```python
 # Reading
 with open(file_path, "r", encoding="utf-8") as f:
     for line in f:
         item = json.loads(line)
-        ...
 
 # Writing
 with open(file_path, "w", encoding="utf-8") as f:
@@ -227,10 +136,24 @@ with open(file_path, "w", encoding="utf-8") as f:
 
 ---
 
-## 4. Important Notes
+## 4. Project Structure
+```
+src/
+├── data/         # Data preprocessing
+├── training/     # Training scripts
+├── inference/    # Generation/inference
+└── api/          # FastAPI + Gradio UI
+tests/            # Pytest tests
+config/           # YAML configs
+data/raw/         # Input data
+data/processed/   # Processed output
+```
 
-- **No proactive changes**: Do NOT make changes without user approval
-- **Verify before committing**: Always run linting before suggesting commits
-- **Push to GitHub**: Always push changes to GitHub after each modification
-- **Security**: Never expose API keys or secrets in code
-- **GPU memory**: Be mindful of memory usage when loading large models
+---
+
+## 5. Important Notes
+
+- **No proactive changes**: Get user approval before modifying code
+- **Verify before commit**: Run `ruff check src/`
+- **Security**: Never expose API keys or secrets
+- **GPU memory**: Be mindful when loading large models
