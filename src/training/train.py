@@ -152,6 +152,11 @@ class NovelTrainer:
                 padding_side="right",
             )
         else:
+            if not MODELSCOPE_AVAILABLE:
+                raise ImportError(
+                    f"Model not found at {self.model_name} and modelscope is not installed. "
+                    "Please either provide a local model or install modelscope: pip install modelscope"
+                )
             model_id = (
                 self.model_name
                 if "/" in str(self.model_name)
@@ -206,6 +211,11 @@ class NovelTrainer:
                         quantization_config=quantization_config,
                     )
                 else:
+                    if not MODELSCOPE_AVAILABLE:
+                        raise ImportError(
+                            f"Model not found at {self.model_name} and modelscope is not installed. "
+                            "Please either provide a local model or install modelscope: pip install modelscope"
+                        )
                     model_id = (
                         self.model_name
                         if "/" in str(self.model_name)
