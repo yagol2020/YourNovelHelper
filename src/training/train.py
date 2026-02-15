@@ -99,7 +99,9 @@ class TrainConfig:
 
     # 输出配置
     output_dir: str = "models/checkpoints"
-    logging_dir: str = "logs"
+    logging_dir: str = field(
+        default_factory=lambda: os.environ.get("TENSORBOARD_LOG_DIR", "logs")
+    )
 
 
 class NovelTrainer:

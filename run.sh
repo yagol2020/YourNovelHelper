@@ -65,7 +65,10 @@ case $MODE in
         ;;
 
     all)
+        TENSORBOARD_LOG_DIR=${2:-logs}
         echo -e "${GREEN}执行完整流程: 预处理 -> 训练${NC}"
+        echo -e "${GREEN}TensorBoard 日志目录: $TENSORBOARD_LOG_DIR${NC}"
+        export TENSORBOARD_LOG_DIR
         echo -e "${GREEN}[1/2] 数据预处理${NC}"
         python -m src.data.preprocess --raw-dir data/raw --output-dir data/processed
         echo -e "${GREEN}[2/2] 模型微调${NC}"
@@ -82,7 +85,8 @@ case $MODE in
         echo "  webui       - 启动 Web UI"
         echo "  generate    - CLI 推理模式 (使用微调模型)"
         echo "  base        - CLI 推理模式 (使用基础模型)"
-        echo "  all         - 完整流程 (预处理 + 训练)"
+        echo "  all [log_dir] - 完整流程 (预处理 + 训练)，log_dir 可选，默认 logs"
+        echo "                 示例: ./run.sh all /root/tf-logs/"
         echo "  help        - 显示帮助"
         ;;
 esac
