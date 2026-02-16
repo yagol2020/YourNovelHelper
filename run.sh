@@ -159,26 +159,25 @@ cmd_download() {
     local model="Qwen3-4B"
     local output="models"
     local is_docker=0
-    local args=("$@")
     
-    for arg in "$@"; do
-        shift
-        case "$arg" in
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
             --model)
-                model="$1"
-                shift
+                model="$2"
+                shift 2
                 ;;
             --output)
-                output="$1"
+                output="$2"
+                shift 2
+                ;;
+            docker)
+                is_docker=1
+                shift
+                ;;
+            *)
                 shift
                 ;;
         esac
-    done
-    
-    for arg in "${args[@]}"; do
-        if [ "$arg" = "docker" ]; then
-            is_docker=1
-        fi
     done
     
     if [ $is_docker -eq 1 ]; then
@@ -196,28 +195,28 @@ cmd_preprocess() {
     local config="config/config.yaml"
     local is_docker=0
     
-    for arg in "$@"; do
-        shift
-        case "$arg" in
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
             --raw-dir)
-                raw_dir="$1"
-                shift
+                raw_dir="$2"
+                shift 2
                 ;;
             --output-dir)
-                output_dir="$1"
-                shift
+                output_dir="$2"
+                shift 2
                 ;;
             --config)
-                config="$1"
+                config="$2"
+                shift 2
+                ;;
+            docker)
+                is_docker=1
+                shift
+                ;;
+            *)
                 shift
                 ;;
         esac
-    done
-    
-    for arg in "$@"; do
-        if [ "$arg" = "docker" ]; then
-            is_docker=1
-        fi
     done
     
     if [ $is_docker -eq 1 ]; then
@@ -239,36 +238,36 @@ cmd_train() {
     local config="config/config.yaml"
     local is_docker=0
     
-    for arg in "$@"; do
-        shift
-        case "$arg" in
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
             --model-dir)
-                model_dir="$1"
-                shift
+                model_dir="$2"
+                shift 2
                 ;;
             --data-dir)
-                data_dir="$1"
-                shift
+                data_dir="$2"
+                shift 2
                 ;;
             --output-dir)
-                output_dir="$1"
-                shift
+                output_dir="$2"
+                shift 2
                 ;;
             --logs-dir)
-                logs_dir="$1"
-                shift
+                logs_dir="$2"
+                shift 2
                 ;;
             --config)
-                config="$1"
+                config="$2"
+                shift 2
+                ;;
+            docker)
+                is_docker=1
+                shift
+                ;;
+            *)
                 shift
                 ;;
         esac
-    done
-    
-    for arg in "$@"; do
-        if [ "$arg" = "docker" ]; then
-            is_docker=1
-        fi
     done
     
     export TENSORBOARD_LOG_DIR="$logs_dir"
