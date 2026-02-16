@@ -43,6 +43,7 @@ data/*.tar.gz
 # Models (large files, may contain sensitive data)
 models/
 logs/
+tf-logs/
 
 # OS
 .DS_Store
