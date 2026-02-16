@@ -29,7 +29,10 @@ case $MODE in
         ;;
 
     train)
+        TENSORBOARD_LOG_DIR=${2:-logs}
         echo -e "${GREEN}[2/3] 模型微调${NC}"
+        echo -e "${YELLOW}TensorBoard 日志: $TENSORBOARD_LOG_DIR (查看: tensorboard --logdir $TENSORBOARD_LOG_DIR)${NC}"
+        export TENSORBOARD_LOGGING_DIR="$TENSORBOARD_LOG_DIR"
         python -m src.training.train --config config/config.yaml
         ;;
 
@@ -76,17 +79,25 @@ case $MODE in
         ;;
 
     help|*)
-        echo "用法: ./run.sh <command>"
+        echo "用法: ./run.sh <command> [选项]"
         echo ""
         echo "命令:"
-        echo "  preprocess  - 数据预处理"
-        echo "  train       - 模型微调"
-        echo "  api         - 启动 API 服务"
-        echo "  webui       - 启动 Web UI"
-        echo "  generate    - CLI 推理模式 (使用微调模型)"
-        echo "  base        - CLI 推理模式 (使用基础模型)"
-        echo "  all [log_dir] - 完整流程 (预处理 + 训练)，log_dir 可选，默认 logs"
-        echo "                 示例: ./run.sh all /root/tf-logs/"
+        echo "  preprocess     - 数据预处理"
+        echo "  train [dir]   - 模型微调 (可选: 日志目录，默认 logs)"
+        echo "  api           - 启动 API 服务"
+        echo "  webui         - 启动 Web UI"
+        echo "  generate      - CLI 推理模式 (使用微调模型)"
+        echo "  base          - CLI 推理模式 (使用基础模型)"
+        echo "  all [dir]     - 完整流程 (预处理 + 训练)，dir 可选，默认 logs"
+        echo ""
+        echo "示例:"
+        echo "  ./run.sh train           # 使用默认 logs 目录"
+        echo "  ./run.sh train mylogs   # 使用 mylogs 目录"
+        echo "  ./run.sh all ./logs     # 完整流程，日志存到 ./logs"
+        echo ""
+        echo "查看 TensorBoard:"
+        echo "  tensorboard --logdir <日志目录>"
+        echo ""
         echo "  help        - 显示帮助"
         ;;
 esac
