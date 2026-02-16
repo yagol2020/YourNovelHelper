@@ -46,6 +46,14 @@ case $MODE in
         python -m src.api.webui
         ;;
 
+    tensorboard)
+        TB_LOG_DIR=${2:-logs}
+        echo -e "${GREEN}启动 TensorBoard${NC}"
+        echo -e "日志目录: $TB_LOG_DIR"
+        echo -e "WSL2 用户请用: http://$(hostname -I | awk '{print $1}'):6006"
+        tensorboard --logdir "$TB_LOG_DIR" --host 0.0.0.0
+        ;;
+
     generate)
         LORA_PATH="models/checkpoints/final"
         if [ -n "$2" ]; then
@@ -82,8 +90,9 @@ case $MODE in
         echo "用法: ./run.sh <command> [选项]"
         echo ""
         echo "命令:"
-        echo "  preprocess     - 数据预处理"
+        echo "  preprocess      - 数据预处理"
         echo "  train [dir]   - 模型微调 (可选: 日志目录，默认 logs)"
+        echo "  tensorboard    - 启动 TensorBoard (可选: 日志目录，默认 logs)"
         echo "  api           - 启动 API 服务"
         echo "  webui         - 启动 Web UI"
         echo "  generate      - CLI 推理模式 (使用微调模型)"
@@ -93,10 +102,10 @@ case $MODE in
         echo "示例:"
         echo "  ./run.sh train           # 使用默认 logs 目录"
         echo "  ./run.sh train mylogs   # 使用 mylogs 目录"
+        echo "  ./run.sh tensorboard    # 启动 TensorBoard"
         echo "  ./run.sh all ./logs     # 完整流程，日志存到 ./logs"
         echo ""
-        echo "查看 TensorBoard:"
-        echo "  tensorboard --logdir <日志目录>"
+        echo "WSL2 用户访问: http://<WSL2-IP>:6006"
         echo ""
         echo "  help        - 显示帮助"
         ;;
