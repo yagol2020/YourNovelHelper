@@ -7,6 +7,7 @@
 
 import json
 import random
+import hashlib
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
@@ -243,8 +244,47 @@ class NovelDatasetProcessor:
 
             print(f"Saved {len(split_data)} samples to {file_path}")
 
+    def _get_source_hash(self, raw_dir: str) -> str:
+        """计算源数据目录和配置的hash，用于判断是否需要重新处理"""
+        hasher = hashlib.md5()
+
+        raw_path = Path(raw_dir)
+        if raw_path.exists():
+            for ext in ["*.txt", "*.json"]:
+                for f in sorted(raw_path.glob("**/" + ext)):
+                    with open(f, "rb") as fp:
+                        hasher.update(fp.read())
+
+        config_str = str(self.data_config)
+        hasher.update(config_str.encode())
+
+        return hasher.hexdigest()[:16]
+
     def process(self, raw_dir: str = "data/raw", output_dir: str = "data/processed"):
         """执行完整的数据处理流程"""
+        cache_dir = Path(output_dir)
+        cache_info_file = cache_dir / ".cache_info.txt"
+
+        current_hash = self._get_source_hash(raw_dir)
+
+        if cache_info_file.exists():
+            cached_hash = cache_info_file.read_text().strip().split(":")[-1]
+            if cached_hash == current_hash:
+                for split in ["train", "val", "test"]:
+                    split_file = cache_dir / f"{split}.jsonl"
+                    if split_file.exists():
+                        with open(split_file, "r", encoding="utf-8") as f:
+                            count = sum(1 for _ in f)
+                        print(f"Using cached {split}.jsonl ({count} samples)")
+                    else:
+                        print(
+                            f"Warning: Cached {split}.jsonl not found, will reprocess"
+                        )
+                        break
+                else:
+                    print("Data processing skipped (source unchanged)")
+                    return
+
         print("Loading raw texts...")
         texts = self.load_raw_texts(raw_dir)
 
@@ -278,6 +318,11 @@ class NovelDatasetProcessor:
 
         print("Saving processed data...")
         self.save_data(split_data, output_dir)
+
+        cache_dir = Path(output_dir)
+        cache_info_file = cache_dir / ".cache_info.txt"
+        current_hash = self._get_source_hash(raw_dir)
+        cache_info_file.write_text(f"hash:{current_hash}")
 
         print("Data processing complete!")
         print(f"  Train: {len(split_data['train'])} samples")
