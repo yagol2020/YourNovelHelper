@@ -68,7 +68,7 @@ case $MODE in
         TENSORBOARD_LOG_DIR=${2:-logs}
         echo -e "${GREEN}执行完整流程: 预处理 -> 训练${NC}"
         echo -e "${GREEN}TensorBoard 日志目录: $TENSORBOARD_LOG_DIR${NC}"
-        export TENSORBOARD_LOG_DIR
+        export TENSORBOARD_LOGGING_DIR="$TENSORBOARD_LOG_DIR"
         echo -e "${GREEN}[1/2] 数据预处理${NC}"
         python -m src.data.preprocess --raw-dir data/raw --output-dir data/processed
         echo -e "${GREEN}[2/2] 模型微调${NC}"
