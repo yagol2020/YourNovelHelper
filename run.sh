@@ -80,10 +80,23 @@ case $MODE in
         echo -e "${GREEN}执行完整流程: 预处理 -> 训练${NC}"
         echo -e "${GREEN}TensorBoard 日志目录: $TENSORBOARD_LOG_DIR${NC}"
         export TENSORBOARD_LOGGING_DIR="$TENSORBOARD_LOG_DIR"
+        
+        echo -e "${GREEN}[启动 TensorBoard]${NC}"
+        WSL_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+        if [ -n "$WSL_IP" ]; then
+            echo -e "WSL2 用户访问: http://${WSL_IP}:6006"
+        fi
+        tensorboard --logdir "$TENSORBOARD_LOG_DIR" --host 0.0.0.0 &
+        TB_PID=$!
+        sleep 2
+        
         echo -e "${GREEN}[1/2] 数据预处理${NC}"
         python -m src.data.preprocess --raw-dir data/raw --output-dir data/processed
         echo -e "${GREEN}[2/2] 模型微调${NC}"
         python -m src.training.train --config config/config.yaml
+        
+        kill $TB_PID 2>/dev/null
+        echo -e "${GREEN}训练完成!${NC}"
         ;;
 
     help|*)
