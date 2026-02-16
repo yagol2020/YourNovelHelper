@@ -442,6 +442,14 @@ class NovelTrainer:
             data_collator=data_collator,
         )
 
+        log_dir = Path(self.train_config.logging_dir).absolute()
+        print(f"\n{'=' * 50}")
+        print(f"Training started!")
+        print(f"TensorBoard logs: {log_dir}")
+        print(f"View with: tensorboard --logdir {log_dir}")
+        print(f"Or open: http://localhost:6006")
+        print(f"{'=' * 50}\n")
+
         print("Starting training...")
         trainer.train()
 

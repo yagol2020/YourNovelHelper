@@ -38,6 +38,7 @@ env/
 # Data directories (large training data)
 data/raw/
 data/processed/
+data/*.tar.gz
 
 # Models (large files, may contain sensitive data)
 models/
