@@ -167,6 +167,157 @@ python -m src.api.webui
 
 ---
 
+## 统一运行入口
+
+项目提供 `run.sh` 统一入口，支持 CLI 和 Docker 两种运行模式。
+
+### 使用方式
+
+```bash
+./run.sh <cli|docker> <command> [options]
+```
+
+### 可用命令
+
+| 命令 | 说明 |
+|:---|:---|
+| `download` | 从 ModelScope 下载模型 |
+| `preprocess` | 预处理小说数据集 |
+| `train` | 微调模型 |
+| `generate` | 文本补全 |
+
+### 示例
+
+```bash
+# CLI 模式（宿主机运行）
+./run.sh cli download --model Qwen3-4B --output ./models
+./run.sh cli preprocess --raw-dir ./data/raw --output-dir ./data/processed
+./run.sh cli train --model-dir ./models --data-dir ./data/processed --output-dir ./models/checkpoints --logs-dir ./logs
+./run.sh cli generate --model-dir ./models --base-model Qwen3-4B --lora ./models/novel-qlora --prompt "小说开头"
+
+# Docker 模式（容器内运行）
+./run.sh docker download --model Qwen3-4B --output ./models
+./run.sh docker preprocess --raw-dir ./data/novels --output-dir ./data/processed
+./run.sh docker train --model-dir /app/models --data-dir /app/data/processed --output-dir /app/models/checkpoints --logs-dir /app/logs
+./run.sh docker generate --model-dir /app/models --base-model Qwen3-4B --prompt "开头"
+```
+
+详细参数请运行 `./run.sh` 查看帮助。
+
+---
+
+## Docker 部署
+
+### 1. 下载模型（推荐）
+
+模型目录结构：
+```
+models/
+├── Qwen3-4B/          # 基础模型
+├── Qwen3-7B/           # 可选其他模型
+└── novel-qlora/        # 训练后的 LoRA
+```
+
+下载模型：
+```bash
+# 下载 Qwen3-4B (默认，约 8GB)
+python scripts/download_model.py
+
+# 查看可下载的模型
+python scripts/download_model.py --list
+```
+
+### 2. 构建镜像
+
+```bash
+docker build . --tag your-novel-helper:latest
+```
+
+### 3. 运行容器
+
+```bash
+# 使用本地模型目录
+docker run -d -p 8000:8000 \
+  -v $(pwd)/models:/app/models \
+  -e MODEL_DIR=/app/models \
+  -e BASE_MODEL=Qwen3-4B \
+  -e LORA_NAME=novel-qlora \
+  your-novel-helper:latest
+
+# 或使用 ModelScope 自动下载
+docker run -d -p 8000:8000 your-novel-helper:latest
+
+# 运行 Web UI
+docker run -d -p 7860:7860 \
+  -v $(pwd)/models:/app/models \
+  -e MODEL_DIR=/app/models \
+  -e BASE_MODEL=Qwen3-4B \
+  your-novel-helper:latest python -m src.api.webui
+```
+
+### 4. 使用 Docker Compose
+
+创建 `docker-compose.yml`:
+
+```yaml
+version: '3.8'
+
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./models:/app/models    # 挂载模型目录
+      - ./data:/app/data        # 挂载数据
+    environment:
+      - MODEL_DIR=/app/models
+      - BASE_MODEL=Qwen3-4B
+      - LORA_NAME=novel-qlora
+      - PYTHONUNBUFFERED=1
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+```
+
+运行:
+
+```bash
+docker-compose up -d
+```
+
+### 环境变量说明
+
+| 变量 | 说明 | 默认值 |
+|:---|:---|:---|
+| `MODEL_DIR` | 模型目录（包含多个模型子目录） | `models` |
+| `BASE_MODEL` | 基础模型名称（model_dir 下的子目录名） | `Qwen3-4B` |
+| `LORA_NAME` | LoRA 模型名称（model_dir 下的子目录名） | `` |
+| `CONFIG_PATH` | 配置文件路径 | `config/config.yaml` |
+
+### CLI 使用方式
+
+```bash
+# 使用本地模型
+python -m src.inference.generate \
+  --model-dir models \
+  --base-model Qwen3-4B \
+  --lora novel-qlora \
+  --prompt "清晨的阳光"
+
+# 交互模式
+python -m src.inference.generate \
+  --model-dir models \
+  --base-model Qwen3-4B \
+  --interactive
+```
+
+---
+
 ## 配置说明
 
 `config/config.yaml` 主要配置项:
