@@ -9,32 +9,26 @@ RUN apt-get update && apt-get install -y \
     git \
     wget \
     vim \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml /app/
-COPY AGENTS.md /app/
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:$PATH"
 
-RUN pip install --no-cache-dir \
-    torch==2.5.1 \
-    transformers>=4.40.0 \
-    peft>=0.10.0 \
-    datasets>=2.18.0 \
-    trl>=0.8.0 \
-    scikit-learn>=1.4.0 \
-    accelerate>=0.28.0 \
-    pyyaml>=6.0 \
-    fastapi>=0.110.0 \
-    uvicorn>=0.27.0 \
-    gradio>=4.0.0 \
-    jieba>=0.42.0 \
-    tqdm>=4.66.0
+COPY pyproject.toml /app/
+
+RUN uv venv /app/.venv && \
+    . /app/.venv/bin/activate && \
+    uv pip install --system -e .
 
 COPY src /app/src
 COPY config /app/config
+COPY scripts /app/scripts
 
 RUN mkdir -p /app/data/raw /app/data/processed /app/models
 
 ENV PYTHONPATH=/app:$PYTHONPATH
+ENV PATH="/app/.venv/bin:$PATH"
 
 EXPOSE 8000
 
