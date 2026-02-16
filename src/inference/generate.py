@@ -35,25 +35,43 @@ class NovelGenerator:
 
     def __init__(
         self,
-        model_path: str = "Qwen3-4B",
-        lora_path: str = "",
+        model_dir: str = "models",
+        base_model: str = "Qwen3-4B",
+        lora_name: str = "",
         config_path: str = "config/config.yaml",
     ):
         """
         初始化生成器
 
         Args:
-            model_path: 基础模型路径 (支持 ModelScope 模型 ID 或本地路径)
-            lora_path: LoRA 权重路径 (可选，指定后加载 LoRA 权重)
+            model_dir: 模型目录（包含多个模型子目录）
+            base_model: 基础模型名称（model_dir 下的子目录名）
+            lora_name: LoRA 模型名称（model_dir 下的子目录名）
             config_path: 配置文件路径
         """
-        self.model_path = model_path
-        self.lora_path = lora_path
+        self.model_dir = Path(model_dir)
+        self.base_model = base_model
+        self.lora_name = lora_name
         self.config_path = config_path
 
         # 加载配置
         with open(config_path, "r", encoding="utf-8") as f:
             config = yaml.safe_load(f)
+
+        # 从配置读取模型信息（命令行参数会覆盖）
+        model_config = config.get("model", {})
+        if not self.base_model:
+            self.base_model = model_config.get("base_model", "Qwen3-4B")
+        # 如果 lora_name 为 None 或空字符串，不从配置读取（用户不想要 LoRA）
+        if self.lora_name is None or self.lora_name == "":
+            self.lora_name = ""
+        if not self.model_dir or self.model_dir == Path("models"):
+            model_dir_cfg = model_config.get("model_dir", "models")
+            self.model_dir = Path(model_dir_cfg)
+
+        # 计算完整路径
+        self.model_path = self.model_dir / self.base_model
+        self.lora_path = self.model_dir / self.lora_name if self.lora_name else ""
 
         inference_config = config.get("inference", {})
         self.max_new_tokens = inference_config.get("max_new_tokens", 2048)
@@ -69,28 +87,29 @@ class NovelGenerator:
         """
         加载预训练模型和分词器
 
-        支持从本地或ModelScope加载模型（本地优先）
+        优先从本地模型目录加载，否则从 ModelScope 下载
         """
-        use_local = Path(self.model_path).exists()
+        # 检查本地模型是否存在
+        use_local = self.model_path.exists()
 
         if use_local:
             print(f"Loading model from {self.model_path}...")
             self.tokenizer = AutoTokenizer.from_pretrained(
-                self.model_path, trust_remote_code=True
+                str(self.model_path), trust_remote_code=True
             )
             if self.tokenizer.pad_token is None:
                 self.tokenizer.pad_token = self.tokenizer.eos_token
             self.model = AutoModelForCausalLM.from_pretrained(
-                self.model_path,
+                str(self.model_path),
                 trust_remote_code=True,
                 torch_dtype=torch.bfloat16,
                 device_map="auto",
             )
         else:
             model_name = (
-                self.model_path
-                if "/" in str(self.model_path)
-                else f"qwen/{self.model_path}"
+                self.base_model
+                if "/" in str(self.base_model)
+                else f"qwen/{self.base_model}"
             )
             print(f"Loading model from ModelScope: {model_name}...")
             self.tokenizer = MsAutoTokenizer.from_pretrained(
@@ -104,19 +123,19 @@ class NovelGenerator:
 
         # 加载 LoRA 权重 (如果指定且存在)
         if self.lora_path:
-            if Path(self.lora_path).exists():
-                print(f"Loading LoRA weights from {self.lora_path}...")
+            lora_path_str = str(self.lora_path)
+            if Path(lora_path_str).exists():
+                print(f"Loading LoRA weights from {lora_path_str}...")
                 self.model = PeftModel.from_pretrained(
                     self.model,
-                    self.lora_path,
+                    lora_path_str,
                     device_map="auto",
                 )
                 print("LoRA weights loaded!")
             else:
                 print(
-                    f"Error: LoRA path '{self.lora_path}' not found. Please run training first or check path."
+                    f"Warning: LoRA path '{lora_path_str}' not found. Continuing without LoRA."
                 )
-                sys.exit(1)
 
         self.model.eval()
         print("Model loaded successfully!")
@@ -230,16 +249,22 @@ def main():
     """命令行入口函数"""
     parser = argparse.ArgumentParser(description="Novel generation inference")
     parser.add_argument(
-        "--model",
+        "--model-dir",
         type=str,
-        default="Qwen3-4B",
-        help="Base model path or ModelScope model ID",
+        default="models",
+        help="Model directory containing model subdirectories",
+    )
+    parser.add_argument(
+        "--base-model",
+        type=str,
+        default="",
+        help="Base model name (subdirectory in model-dir)",
     )
     parser.add_argument(
         "--lora",
         type=str,
         default="",
-        help="LoRA weights path (optional, for fine-tuned model)",
+        help="LoRA model name (subdirectory in model-dir) or full path",
     )
     parser.add_argument(
         "--config", type=str, default="config/config.yaml", help="Config file"
@@ -254,14 +279,26 @@ def main():
 
     args = parser.parse_args()
 
-    # 检查 lora 路径
-    if args.lora and not Path(args.lora).exists():
-        print(
-            f"Error: LoRA path '{args.lora}' not found. Please run training first or check path."
-        )
-        sys.exit(1)
+    # 检查本地模型路径
+    model_dir = Path(args.model_dir)
+    base_model = args.base_model
+    lora_name = args.lora if args.lora else None
 
-    generator = NovelGenerator(args.model, args.lora, args.config)
+    # 只有当用户明确指定了 --lora 参数时才验证路径
+    if lora_name:
+        if not Path(lora_name).is_absolute() and not (model_dir / lora_name).exists():
+            full_lora_path = model_dir / lora_name
+            if full_lora_path.exists():
+                lora_name = str(full_lora_path)
+            else:
+                print(f"Warning: LoRA path '{full_lora_path}' not found.")
+
+    generator = NovelGenerator(
+        model_dir=args.model_dir,
+        base_model=base_model,
+        lora_name=lora_name,
+        config_path=args.config,
+    )
 
     # 命令行参数覆盖配置文件
     if args.max_tokens:
