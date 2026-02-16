@@ -396,6 +396,9 @@ class NovelTrainer:
         if not datasets:
             raise ValueError("No datasets found. Please run data preprocessing first.")
 
+        print(f"[DEBUG] logging_dir: {self.train_config.logging_dir}")
+        print(f"[DEBUG] report_to: {self.train_config.report_to}")
+
         # 配置训练参数
         training_args = TrainingArguments(
             output_dir=self.train_config.output_dir,
