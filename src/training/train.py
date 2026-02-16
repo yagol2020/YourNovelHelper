@@ -293,11 +293,11 @@ class NovelTrainer:
         cache_dir.mkdir(parents=True, exist_ok=True)
 
         def get_file_hash(path: Path) -> str:
-            """获取文件hash用于判断是否需要重新tokenize"""
+            """获取文件内容hash用于判断是否需要重新tokenize"""
             if not path.exists():
                 return ""
-            mtime = str(path.stat().st_mtime)
-            return hashlib.md5(f"{path.name}{mtime}".encode()).hexdigest()[:8]
+            with open(path, "rb") as f:
+                return hashlib.md5(f.read()).hexdigest()[:16]
 
         def tokenize_function(examples):
             prompts = examples["prompt"]
