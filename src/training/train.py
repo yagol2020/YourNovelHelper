@@ -59,7 +59,7 @@ except ImportError:
 class TrainConfig:
     """训练配置参数"""
 
-    model_name: str = "Qwen3-4B"
+    model_name: str = "Qwen2.5-0.5B"
     trust_remote_code: bool = True
 
     # LoRA 配置

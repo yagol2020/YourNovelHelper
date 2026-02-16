@@ -1,5 +1,5 @@
 model:
-  name: Qwen3-4B
+  name: Qwen2.5-0.5B
   trust_remote_code: true
   
 training:
