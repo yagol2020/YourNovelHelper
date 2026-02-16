@@ -69,9 +69,11 @@ echo "Installing dependencies..."
 if [ "$USE_UV" == "true" ]; then
     uv pip install torch transformers peft datasets trl accelerate pyyaml
     uv pip install fastapi uvicorn gradio jieba tqdm scikit-learn
+    uv pip install 'setuptools<82'
 else
     pip install torch transformers peft datasets trl accelerate pyyaml
     pip install fastapi uvicorn gradio jieba tqdm scikit-learn
+    pip install 'setuptools<82'
 fi
 
 echo ""
