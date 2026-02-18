@@ -22,6 +22,8 @@
 | 💻 **命令行工具** | 交互式小说续写 |
 | 🌐 **Web API** | FastAPI 服务接口 |
 | 🎨 **Web UI** | Gradio 图形界面 |
+| ⚙️ **CI/CD** | GitHub Actions 自动化测试与 Docker 镜像构建 |
+| `./run.sh` 统一入口 | 统一 CLI 和 Docker 运行方式 |
 
 ---
 
@@ -290,6 +292,33 @@ services:
 docker-compose up -d
 ```
 
+---
+
+## GitHub Actions CI/CD
+
+项目配置了 GitHub Actions 自动化流程，包含以下阶段:
+
+### 工作流程
+
+| 阶段 | 说明 |
+|:---|:---|
+| **Lint** | 使用 ruff 检查代码规范 |
+| **Test** | 运行 pytest 测试套件 |
+| **Build** | 构建并推送 Docker 镜像到 Docker Hub |
+
+### 触发条件
+
+- `lint` 和 `test`: 每次 push 和 PR
+- `build`: 仅在 push 到 master 分支时触发
+
+### 配置
+
+Docker Hub 镜像推送需要配置以下 Secrets:
+- `DOCKER_USERNAME`: Docker Hub 用户名
+- `DOCKER_PASSWORD`: Docker Hub 访问令牌
+
+---
+
 ### 环境变量说明
 
 | 变量 | 说明 | 默认值 |
@@ -302,7 +331,7 @@ docker-compose up -d
 ### CLI 使用方式
 
 ```bash
-# 使用本地模型
+# 使用本地模型目录
 python -m src.inference.generate \
   --model-dir models \
   --base-model Qwen3-4B \
@@ -314,6 +343,22 @@ python -m src.inference.generate \
   --model-dir models \
   --base-model Qwen3-4B \
   --interactive
+
+# 不使用 LoRA（基础模型）
+python -m src.inference.generate \
+  --model-dir models \
+  --base-model Qwen3-4B \
+  --prompt "小说开头"
+```
+
+### Web UI 命令行参数
+
+```bash
+python -m src.api.webui \
+  --model-dir models \
+  --base-model Qwen3-4B \
+  --lora novel-qlora \
+  --port 7860
 ```
 
 ---
@@ -324,7 +369,10 @@ python -m src.inference.generate \
 
 | 配置项 | 说明 | 默认值 |
 |:---|:---|:---|
-| `model.name` | 模型名称 (支持 ModelScope 模型 ID 或本地路径) | Qwen3-4B |
+| `model.name` | 模型名称 (支持 ModelScope 模型 ID 或本地路径) | Qwen2.5-0.5B |
+| `model.model_dir` | 模型目录（包含多个模型子目录） | models |
+| `model.base_model` | 基础模型名称（model_dir 下的子目录名） | Qwen3-4B |
+| `model.lora_name` | LoRA 模型名称（model_dir 下的子目录名） | novel-qlora |
 | `training.method` | 训练方法 | qlora |
 | `training.lora_rank` | LoRA rank | 16 |
 | `training.num_epochs` | 训练轮数 | 3 |
